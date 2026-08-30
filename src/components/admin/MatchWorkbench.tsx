@@ -1,0 +1,317 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { CampaignDialog } from "@/components/admin/CampaignDialog";
+import { cn } from "@/lib/utils";
+
+type Row = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  city: string | null;
+  region: string | null;
+  seniority: string | null;
+  experience: string | null;
+  institution: string | null;
+  cohort: number | null;
+  status: string;
+  mailable: boolean;
+  score: number;
+  reason: string;
+  matched: string[];
+  missing: string[];
+};
+
+type Extracted = {
+  technologies: string[];
+  programmingLanguages: string[];
+  seniority: string | null;
+  region: string | null;
+  minYears: number | null;
+};
+
+const SAMPLE = `דרוש/ה מפתח/ת Full Stack
+לפחות 3 שנות ניסיון בפיתוח ב-C# ו-.NET
+ניסיון ב-React וב-SQL Server
+העבודה באזור המרכז, היברידי`;
+
+export function MatchWorkbench() {
+  const [text, setText] = useState("");
+  const [rows, setRows] = useState<Row[] | null>(null);
+  const [extracted, setExtracted] = useState<Extracted | null>(null);
+  const [total, setTotal] = useState(0);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [campaignOpen, setCampaignOpen] = useState(false);
+
+  const selectedRows = useMemo(
+    () => (rows ?? []).filter((r) => selected.has(r.id)),
+    [rows, selected],
+  );
+
+  async function run() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "החיפוש נכשל.");
+      setRows(json.results);
+      setExtracted(json.requirement);
+      setTotal(json.total);
+      setSelected(new Set());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "אירעה שגיאה.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const allSelected = rows != null && rows.length > 0 && selected.size === rows.length;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <section className="rounded-[var(--radius-card)] bg-white p-6 shadow-[0_10px_40px_-30px_rgb(28_28_60_/_0.4)]">
+        <label htmlFor="req" className="text-[15px] font-bold text-navy">
+          טקסט הדרישה
+        </label>
+        <textarea
+          id="req"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={7}
+          placeholder="הדביקי כאן את הדרישה כפי שהתקבלה מהמעסיק…"
+          className="focus-brand mt-2 w-full resize-y rounded-[22px] border border-ink/20 bg-white px-5 py-4 text-[15px] leading-relaxed placeholder:text-ink/45"
+        />
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button onClick={run} disabled={busy || text.trim().length < 3} withArrow={false}>
+            {busy ? "מחפשת…" : "מצא לי מועמדות"}
+          </Button>
+          <button
+            type="button"
+            onClick={() => setText(SAMPLE)}
+            className="focus-brand rounded-full px-3 py-2 text-[14px] text-primary hover:bg-primary-50"
+          >
+            נסי עם דוגמה
+          </button>
+        </div>
+        {error && (
+          <p role="alert" className="mt-3 rounded-2xl bg-red-50 px-5 py-3 text-[14px] font-medium text-red-700">
+            {error}
+          </p>
+        )}
+      </section>
+
+      {extracted && (
+        <section className="rounded-[var(--radius-card)] bg-mint-100 p-6">
+          <h2 className="text-[15px] font-bold text-navy">מה זוהה בדרישה</h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {[...extracted.programmingLanguages, ...extracted.technologies].map((t) => (
+              <span
+                key={t}
+                dir="ltr"
+                className="rounded-full bg-white px-3.5 py-1.5 text-[13px] font-semibold text-navy"
+              >
+                {t}
+              </span>
+            ))}
+            {extracted.seniority && <Chip>{extracted.seniority}</Chip>}
+            {extracted.region && <Chip>אזור {extracted.region}</Chip>}
+            {extracted.minYears != null && <Chip>מינימום {extracted.minYears} שנות ניסיון</Chip>}
+            {!extracted.programmingLanguages.length &&
+              !extracted.technologies.length &&
+              !extracted.seniority &&
+              !extracted.region && (
+                <span className="text-[14px] text-ink/70">
+                  לא זוהו דרישות ספציפיות — נסי לכתוב טכנולוגיות מפורשות.
+                </span>
+              )}
+          </div>
+        </section>
+      )}
+
+      {rows && (
+        <section className="rounded-[var(--radius-card)] bg-white p-6 shadow-[0_10px_40px_-30px_rgb(28_28_60_/_0.4)]">
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-4">
+            <p className="text-[15px] text-ink/70">
+              <strong className="text-navy">{rows.length}</strong> מועמדות מתאימות מתוך {total} במאגר
+              {selected.size > 0 && <> · נבחרו {selected.size}</>}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))}
+                className="focus-brand rounded-full border border-ink/15 px-4 py-2 text-[14px] font-semibold hover:bg-canvas"
+              >
+                {allSelected ? "בטלי בחירה" : "סמני הכל"}
+              </button>
+              <button
+                type="button"
+                disabled={!selectedRows.length}
+                onClick={() => exportCsv(selectedRows)}
+                className="focus-brand rounded-full border border-ink/15 px-4 py-2 text-[14px] font-semibold hover:bg-canvas disabled:opacity-40"
+              >
+                ייצוא רשימה
+              </button>
+              <Button
+                size="sm"
+                withArrow={false}
+                disabled={!selectedRows.some((r) => r.mailable)}
+                onClick={() => setCampaignOpen(true)}
+              >
+                שליחת מייל לנבחרות
+              </Button>
+            </div>
+          </div>
+
+          {rows.length === 0 ? (
+            <p className="py-10 text-center text-[15px] text-ink/60">
+              לא נמצאו מועמדות שעונות על הדרישה.
+            </p>
+          ) : (
+            <ul className="flex flex-col divide-y divide-ink/8">
+              {rows.map((r) => (
+                <li key={r.id}>
+                  <label
+                    className={cn(
+                      "flex cursor-pointer items-start gap-4 rounded-2xl px-3 py-4 transition-colors hover:bg-canvas",
+                      selected.has(r.id) && "bg-primary-50",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(r.id)}
+                      onChange={() => toggle(r.id)}
+                      className="focus-brand mt-1.5 h-4 w-4 accent-[var(--color-primary)]"
+                      aria-label={`בחירת ${r.name}`}
+                    />
+                    <span className="grid w-12 shrink-0 place-items-center">
+                      <ScoreRing score={r.score} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-baseline gap-x-3">
+                        <strong className="text-[16px] text-navy">{r.name}</strong>
+                        {r.institution && (
+                          <span className="text-[13px] text-ink/55">
+                            {r.institution}
+                            {r.cohort ? ` · ${r.cohort}` : ""}
+                          </span>
+                        )}
+                        {!r.mailable && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[12px] font-semibold text-amber-800">
+                            ללא הסכמת דיוור
+                          </span>
+                        )}
+                        {r.status === "placed" && (
+                          <span className="rounded-full bg-ink/10 px-2 py-0.5 text-[12px] font-semibold text-ink/70">
+                            הושמה
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-1 block text-[14px] text-ink/75">{r.reason}</span>
+                      <span className="mt-1.5 flex flex-wrap gap-1.5">
+                        {r.matched.map((t) => (
+                          <span
+                            key={t}
+                            dir="ltr"
+                            className="rounded-full bg-mint-100 px-2.5 py-0.5 text-[12px] font-medium text-navy"
+                          >
+                            {t}
+                          </span>
+                        ))}
+                        {r.missing.map((t) => (
+                          <span
+                            key={t}
+                            dir="ltr"
+                            className="rounded-full bg-canvas px-2.5 py-0.5 text-[12px] text-ink/50 line-through"
+                          >
+                            {t}
+                          </span>
+                        ))}
+                      </span>
+                    </span>
+                    <span className="hidden shrink-0 text-[13px] text-ink/55 sm:block" dir="ltr">
+                      {r.email}
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {campaignOpen && (
+        <CampaignDialog
+          recipients={selectedRows.filter((r) => r.mailable).map((r) => ({ id: r.id, name: r.name, email: r.email! }))}
+          onClose={() => setCampaignOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function Chip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-full bg-white px-3.5 py-1.5 text-[13px] font-semibold text-navy">
+      {children}
+    </span>
+  );
+}
+
+function ScoreRing({ score }: { score: number }) {
+  const tone = score >= 75 ? "text-mint-600" : score >= 45 ? "text-primary" : "text-ink/35";
+  return (
+    <span className="relative grid h-11 w-11 place-items-center" title={`ציון התאמה ${score}%`}>
+      <svg viewBox="0 0 40 40" className="absolute inset-0 h-full w-full -rotate-90">
+        <circle cx="20" cy="20" r="17" fill="none" stroke="currentColor" strokeWidth="4" className="text-ink/10" />
+        <circle
+          cx="20"
+          cy="20"
+          r="17"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="4"
+          strokeLinecap="round"
+          className={tone}
+          strokeDasharray={`${(score / 100) * 106.8} 106.8`}
+        />
+      </svg>
+      <span className="relative text-[12px] font-bold text-navy">{score}</span>
+    </span>
+  );
+}
+
+function exportCsv(rows: Row[]) {
+  const header = ["שם", "מייל", "טלפון", "עיר", "אזור", "ניסיון", "בכירות", "מוסד", "שנתון", "ציון", "סיבה"];
+  const body = rows.map((r) =>
+    [r.name, r.email, r.phone, r.city, r.region, r.experience, r.seniority, r.institution, r.cohort, r.score, r.reason]
+      .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
+      .join(","),
+  );
+  // BOM so Excel opens Hebrew correctly.
+  const blob = new Blob(["﻿" + [header.join(","), ...body].join("\n")], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `מועמדות-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}

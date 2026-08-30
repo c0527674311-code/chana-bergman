@@ -1,0 +1,266 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Chana Bergman — Design tokens
+   Colors extracted directly from the Figma export PDFs.
+   Brand strategy (Sky Branding): דיוק ומקצוענות · איכות וטכנולוגיה · אמינות ושקיפות
+   ============================================================ */
+
+@theme {
+  /* Brand */
+  --color-primary: #6c83d0; /* periwinkle — buttons, links */
+  --color-primary-600: #5a72c6;
+  --color-primary-700: #4a61b4;
+  --color-primary-100: #e6eaf8;
+  --color-primary-50: #f2f5fc;
+
+  --color-mint: #90e5d6; /* accent — highlights, icon circles */
+  --color-mint-400: #92e3da;
+  --color-mint-600: #5ecebb;
+  --color-mint-100: #e2f9f4;
+
+  --color-navy: #001348; /* display headings */
+  --color-ink: #1c1c3c; /* body text */
+  --color-ink-70: #55556e;
+  --color-ink-45: #8a8a9c;
+
+  --color-grad-from: #4473c0;
+  --color-grad-to: #6980cb;
+
+  --color-surface: #ffffff;
+  --color-canvas: #f4f5f7; /* light grey section bg */
+
+  /* Typography — Ping HL is the brand face across the WHOLE system (Hebrew
+     and Latin alike). Drop the licensed files into /public/fonts (see the
+     @font-face rules below) and it applies everywhere instantly; until then
+     Assistant/Poppins stand in with near-identical metrics. */
+  --font-sans: "Ping HL", var(--font-assistant, "Assistant"), ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Ping HL", var(--font-poppins, "Poppins"), var(--font-assistant, "Assistant"), sans-serif;
+
+  /* Radii — the design uses fully-rounded pills for every input & button */
+  --radius-field: 999px;
+  --radius-card: 28px;
+  --radius-panel: 40px;
+
+  --shadow-card: 0 18px 50px -24px rgb(28 28 60 / 0.28);
+  --shadow-pop: 0 12px 34px -14px rgb(28 28 60 / 0.22);
+}
+
+/* Brand font: place PingHL-Regular.woff2 / PingHL-Bold.woff2 in /public/fonts
+   and the whole system switches to Ping automatically. */
+@font-face {
+  font-family: "Ping HL";
+  src: url("/fonts/PingHL-Regular.woff2") format("woff2");
+  font-weight: 300 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Ping HL";
+  src: url("/fonts/PingHL-Bold.woff2") format("woff2");
+  font-weight: 600 900;
+  font-display: swap;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Latin display words ("About us", "How does it work?") are set in the
+   geometric face while the surrounding Hebrew stays in the brand face. */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* Mint marker behind a word — used in the section titles.
+   The background sweeps in (RTL: from the right) when scrolled into view. */
+.mark-mint {
+  background-image: linear-gradient(var(--color-mint), var(--color-mint));
+  background-repeat: no-repeat;
+  background-position: 100% 0;
+  background-size: 100% 100%;
+  padding-inline: 0.28em;
+  padding-block: 0.02em;
+  border-radius: 4px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+html.fx .mark-mint {
+  background-size: 0% 100%;
+  transition: background-size 0.7s cubic-bezier(0.22, 0.8, 0.32, 1) 0.25s;
+}
+html.fx .mark-mint.mark-in {
+  background-size: 100% 100%;
+}
+
+/* ============================================================
+   Scroll-reveal entrances.
+   The `fx` class is stamped on <html> by an inline script before first
+   paint, so content stays fully visible for no-JS visitors and there is
+   no hide-then-show flash on hydration.
+   ============================================================ */
+html.fx [data-reveal] {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s cubic-bezier(0.22, 0.8, 0.32, 1);
+  transition-delay: var(--reveal-delay, 0s);
+  will-change: opacity, transform;
+}
+html.fx [data-reveal].revealed {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.fx [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  html.fx .mark-mint {
+    background-size: 100% 100%;
+    transition: none;
+  }
+}
+
+/* The full-bleed scrolling word strip ("CONTACT US CONTACT US …") */
+@keyframes marquee-rtl {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(50%);
+  }
+}
+@keyframes marquee-ltr {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.animate-marquee-rtl {
+  animation: marquee-rtl var(--marquee-duration, 30s) linear infinite;
+}
+.animate-marquee-ltr {
+  animation: marquee-ltr var(--marquee-duration, 30s) linear infinite;
+}
+.marquee-paused:hover .animate-marquee-rtl,
+.marquee-paused:hover .animate-marquee-ltr {
+  animation-play-state: paused;
+}
+
+/* Hold marquees at their start until they scroll into view — otherwise the
+   strip has already run most of its loop by the time the reader reaches it. */
+html.fx [data-marquee] .animate-marquee-rtl,
+html.fx [data-marquee] .animate-marquee-ltr {
+  animation-play-state: paused;
+}
+html.fx [data-marquee].revealed .animate-marquee-rtl,
+html.fx [data-marquee].revealed .animate-marquee-ltr {
+  animation-play-state: running;
+}
+
+/* Floating decorative blobs on the inner-page heroes */
+@keyframes blob-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-16px) rotate(4deg);
+  }
+}
+.animate-blob {
+  animation: blob-float var(--blob-duration, 7s) ease-in-out infinite;
+  animation-delay: var(--blob-delay, 0s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee-rtl,
+  .animate-marquee-ltr,
+  .animate-blob {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* Latin-value fields (email, phone) carry dir="ltr" so the value never
+   reorders — but the Hebrew placeholder must still sit on the right like
+   every other field in the form. */
+input[dir="ltr"],
+textarea[dir="ltr"] {
+  text-align: right;
+}
+
+/* Native selects need room for the chevron on the correct (left) side in RTL */
+select.field-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='8' viewBox='0 0 14 8' fill='none'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%231C1C3C' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 1.35rem center;
+}
+
+/* Focus ring consistent across every control */
+.focus-brand:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-mint);
+  color: var(--color-navy);
+}
+
+/* Sliders scroll natively; the scrollbar itself would break the card layout. */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================================
+   CV builder — printing the preview to PDF.
+   The browser's "save as PDF" is the download mechanism, so print
+   shows ONLY the CV sheet, at full A4, no chrome.
+   ============================================================ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #cv-print-area,
+  #cv-print-area * {
+    visibility: visible;
+  }
+  #cv-print-area {
+    position: absolute;
+    inset: 0;
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0;
+    transform: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    /* Templates use colored bands/chips — keep them in the saved PDF. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @page {
+    size: A4;
+    margin: 0;
+  }
+}
