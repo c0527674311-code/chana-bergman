@@ -58,66 +58,14 @@ export function Header({
       <div dir="ltr" className="mx-auto flex h-20 max-w-[1400px] items-center gap-4 px-5 lg:px-10">
         <Logo />
 
-        {/* Account menu — sits beside the logo exactly as in the profile mockup */}
-        <div ref={userRef} className="relative hidden lg:block">
-          <button
-            type="button"
-            onClick={() => setUserOpen((v) => !v)}
-            aria-expanded={userOpen}
-            aria-haspopup="menu"
-            className="focus-brand flex items-center gap-1.5 rounded-full px-3 py-2 text-[15px] text-ink hover:bg-primary-50"
-          >
-            <span>הי, {user?.firstName ?? "משתמש"}</span>
-            <svg
-              viewBox="0 0 14 8"
-              fill="none"
-              className={cn("h-2 w-3 transition-transform", userOpen && "rotate-180")}
-              aria-hidden="true"
-            >
-              <path d="M1 1l6 6 6-6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-          </button>
-
-          {userOpen && (
-            <div
-              role="menu"
-              dir="rtl"
-              className="absolute left-0 top-full mt-1 w-60 rounded-[22px] bg-white p-2 shadow-[var(--shadow-pop)] ring-1 ring-ink/5"
-            >
-              {user ? (
-                <>
-                  <MenuItem href="/profile">הפרופיל שלי</MenuItem>
-                  <MenuItem href="/profile/edit">עריכת פרטים אישיים</MenuItem>
-                  {user.isAdmin && <MenuItem href="/admin">מערכת הניהול</MenuItem>}
-                  <hr className="my-2 border-ink/10" />
-                  <form action="/auth/signout" method="post">
-                    <button
-                      type="submit"
-                      role="menuitem"
-                      className="focus-brand w-full rounded-2xl px-4 py-2.5 text-start text-[15px] text-ink hover:bg-primary-50"
-                    >
-                      התנתקות
-                    </button>
-                  </form>
-                </>
-              ) : (
-                <>
-                  <MenuItem href="/login">התחברות</MenuItem>
-                  <MenuItem href="/register">הרשמה לאתר</MenuItem>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Items run right-to-left inside the bar (בית on the right) as
-            designed. Nudged left of centre so it never runs under the hero
-            video, which occupies the right 41% of the viewport. */}
-        {/* Physical margins on purpose: this element is dir="rtl", so logical
-            ms-/me- would resolve mirrored to the ltr bar around it. */}
+        {/* One cluster: nav links + account menu, uniform gap throughout, so
+            the eye reads a single balanced menu. Items run right-to-left
+            (בית on the right, the account menu last). mx-auto centres the
+            cluster in the free space between logo and CTAs, which also keeps
+            it left of the hero video that the CTAs float over. */}
         <nav
           dir="rtl"
-          className="ml-6 mr-auto hidden items-center gap-7 lg:flex"
+          className="mx-auto hidden items-center gap-7 lg:flex"
           aria-label="ניווט ראשי"
         >
           {NAV.map((item) => {
@@ -136,6 +84,59 @@ export function Header({
               </Link>
             );
           })}
+
+          <div ref={userRef} className="relative">
+            {/* -mx cancels most of the hover-pill padding so the visual gap
+                around this item matches the plain links beside it. */}
+            <button
+              type="button"
+              onClick={() => setUserOpen((v) => !v)}
+              aria-expanded={userOpen}
+              aria-haspopup="menu"
+              className="focus-brand -mx-2.5 flex items-center gap-1.5 rounded-full px-3 py-2 text-[15px] text-ink hover:bg-primary-50"
+            >
+              <span>הי, {user?.firstName ?? "משתמש"}</span>
+              <svg
+                viewBox="0 0 14 8"
+                fill="none"
+                className={cn("h-2 w-3 transition-transform", userOpen && "rotate-180")}
+                aria-hidden="true"
+              >
+                <path d="M1 1l6 6 6-6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </button>
+
+            {userOpen && (
+              <div
+                role="menu"
+                dir="rtl"
+                className="absolute left-0 top-full mt-1 w-60 rounded-[22px] bg-white p-2 shadow-[var(--shadow-pop)] ring-1 ring-ink/5"
+              >
+                {user ? (
+                  <>
+                    <MenuItem href="/profile">הפרופיל שלי</MenuItem>
+                    <MenuItem href="/profile/edit">עריכת פרטים אישיים</MenuItem>
+                    {user.isAdmin && <MenuItem href="/admin">מערכת הניהול</MenuItem>}
+                    <hr className="my-2 border-ink/10" />
+                    <form action="/auth/signout" method="post">
+                      <button
+                        type="submit"
+                        role="menuitem"
+                        className="focus-brand w-full rounded-2xl px-4 py-2.5 text-start text-[15px] text-ink hover:bg-primary-50"
+                      >
+                        התנתקות
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  <>
+                    <MenuItem href="/login">התחברות</MenuItem>
+                    <MenuItem href="/register">הרשמה לאתר</MenuItem>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </nav>
 
         <div className="ml-auto flex items-center gap-2 lg:ml-0">
