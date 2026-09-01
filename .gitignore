@@ -45,4 +45,5 @@ next-env.d.ts
 
 # supabase local state + generated db password
 /.supabase-db-password.txt
+/.admin-password.txt
 /supabase/.temp/
