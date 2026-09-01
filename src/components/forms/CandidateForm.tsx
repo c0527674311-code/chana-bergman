@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Field";
 import { FileDrop } from "@/components/ui/FileDrop";
@@ -143,9 +143,44 @@ export function CandidateForm({
     }
   }
 
+  // The success panel replaces the whole form, so the page gets much shorter and
+  // a candidate who just pressed submit at the bottom is left staring at the
+  // footer with no confirmation in sight. Three browser behaviours to handle,
+  // all confirmed by measuring on the deployed page:
+  //
+  //  * globals.css sets `scroll-behavior: smooth` on <html>, and a smooth
+  //    programmatic scroll from here never runs at all. "instant" overrides the
+  //    CSS per spec and does move the page.
+  //  * Scrolling on the frame right after commit gets clamped away — the
+  //    document is still shrinking, so we get pinned to the old maximum.
+  //  * requestAnimationFrame does not fire while the tab is hidden, so a
+  //    rAF-only version silently does nothing for anyone who submits and then
+  //    switches tabs. Timers still fire, so drive it from both.
+  //
+  // Hence: attempt on the next frame and on a timer, then verify once and
+  // correct. Re-scrolling to a spot we already occupy is a no-op, so the
+  // overlap is harmless.
+  const successRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    const bring = () => node.scrollIntoView({ behavior: "instant", block: "center" });
+    requestAnimationFrame(() => requestAnimationFrame(bring));
+    window.setTimeout(bring, 60);
+    window.setTimeout(() => {
+      const { top, bottom } = node.getBoundingClientRect();
+      if (top < 0 || bottom > window.innerHeight) bring();
+    }, 250);
+    node.focus({ preventScroll: true });
+  }, []);
+
   if (state.kind === "done" && mode === "submit") {
     return (
-      <div className="rounded-[var(--radius-card)] bg-mint-100 p-10 text-center">
+      <div
+        ref={successRef}
+        tabIndex={-1}
+        role="status"
+        aria-live="polite"
+        className="focus-brand rounded-[var(--radius-card)] bg-mint-100 p-10 text-center"
+      >
         <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-mint text-navy">
           <svg viewBox="0 0 24 24" fill="none" className="h-7 w-7" aria-hidden="true">
             <path
