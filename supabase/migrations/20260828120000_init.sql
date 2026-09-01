@@ -342,18 +342,18 @@ returns uuid
 language sql
 stable
 as $$
-  select id from candidates
-   where deleted_at is null
-     and email_key is not null
-     and email_key = nullif(lower(trim(p_email)), '')
-   limit 1
-  union all
-  select id from candidates
-   where deleted_at is null
-     and phone_key is not null
-     and phone_key = normalize_il_phone(p_phone)
-   limit 1
-  limit 1;
+  select coalesce(
+    (select id from candidates
+      where deleted_at is null
+        and email_key is not null
+        and email_key = nullif(lower(trim(p_email)), '')
+      limit 1),
+    (select id from candidates
+      where deleted_at is null
+        and phone_key is not null
+        and phone_key = normalize_il_phone(p_phone)
+      limit 1)
+  );
 $$;
 
 -- ---------------------------------------------------------------------------

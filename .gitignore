@@ -42,3 +42,7 @@ next-env.d.ts
 
 # local dev form submissions
 /.local-submissions/
+
+# supabase local state + generated db password
+/.supabase-db-password.txt
+/supabase/.temp/
