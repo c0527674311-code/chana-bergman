@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/auth-guard";
 import { adminConfigured, createAdminClient } from "@/lib/supabase/admin";
 import { MAX_PARSE_BYTES, parseCv, parserConfigured } from "@/lib/cv-parser";
 import { classifyFromPath } from "@/lib/folder-classification";
-import { normalizeEmail } from "@/lib/utils";
+import { normalizeEmail, storageKey } from "@/lib/utils";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -127,8 +127,7 @@ export async function POST(request: Request) {
     }
 
     // 3. Store the original file as a new version. Originals are never deleted.
-    const safeName = file.name.replace(/[^\w.\-֐-׿]/g, "_");
-    const path = `${candidateId}/${Date.now()}-${safeName}`;
+    const path = `${candidateId}/${Date.now()}-${storageKey(file.name)}`;
     const { error: upErr } = await admin.storage
       .from("cvs")
       .upload(path, buffer, { contentType: file.type || undefined, upsert: false });

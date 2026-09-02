@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { adminConfigured, createAdminClient } from "@/lib/supabase/admin";
 import { createClient, supabaseConfigured } from "@/lib/supabase/server";
 import { saveDevSubmission } from "@/lib/dev-fallback";
-import { normalizeEmail, normalizePhone } from "@/lib/utils";
+import { normalizeEmail, normalizePhone, storageKey } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -150,8 +150,7 @@ export async function POST(request: Request) {
         : null;
 
     if (doc && candidateId) {
-      const safeName = doc.fileName.replace(/[^\w.\-֐-׿]/g, "_");
-      const path = `${candidateId}/${Date.now()}-${safeName}`;
+      const path = `${candidateId}/${Date.now()}-${storageKey(doc.fileName)}`;
       const { error: upErr } = await admin.storage
         .from("cvs")
         .upload(path, doc.bytes, { contentType: doc.mime ?? undefined, upsert: false });

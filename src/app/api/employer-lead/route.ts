@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { storageKey } from "@/lib/utils";
 import { adminConfigured, createAdminClient } from "@/lib/supabase/admin";
 import { saveDevSubmission } from "@/lib/dev-fallback";
 
@@ -55,8 +56,7 @@ export async function POST(request: Request) {
 
     let attachmentPath: string | null = null;
     if (file) {
-      const safeName = file.name.replace(/[^\w.\-֐-׿]/g, "_");
-      const path = `leads/${Date.now()}-${safeName}`;
+      const path = `leads/${Date.now()}-${storageKey(file.name)}`;
       const { error: upErr } = await supabase.storage
         .from("requirements")
         .upload(path, file, { contentType: file.type || undefined, upsert: false });

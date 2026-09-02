@@ -25,6 +25,13 @@ export function renderTemplate(template: string, r: MailRecipient): string {
     .replaceAll("{{last_name}}", r.lastName ?? "");
 }
 
+/**
+ * Wraps the campaign body in the email shell.
+ *
+ * The direction is declared on the inner div, not only on <html>: Gmail strips
+ * the <html> and <body> tags and renders what is left, so a dir set up there is
+ * simply lost and Hebrew arrives left-aligned.
+ */
 function toHtml(body: string, unsubscribeUrl: string): string {
   const paragraphs = body
     .split(/\n{2,}/)
@@ -32,7 +39,7 @@ function toHtml(body: string, unsubscribeUrl: string): string {
     .join("");
 
   return `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f5f7">
-<div style="max-width:600px;margin:0 auto;padding:32px 24px;font-family:Assistant,Arial,sans-serif;font-size:16px;line-height:1.7;color:#1c1c3c;background:#fff">
+<div dir="rtl" style="max-width:600px;margin:0 auto;padding:32px 24px;font-family:Assistant,Arial,sans-serif;font-size:16px;line-height:1.7;color:#1c1c3c;background:#fff;direction:rtl;text-align:right">
 ${paragraphs}
 <hr style="margin:28px 0;border:0;border-top:1px solid #e6e6ee">
 <p style="font-size:12px;color:#8a8a9c;margin:0">
