@@ -48,6 +48,7 @@ export const HOME = {
   howItWorks: {
     kickerEn: ["How does it ", "work", "?"],
     subtitle: "תהליך פשוט, מהיר ומדויק — ואנחנו עושות בשבילך את העבודה",
+    /** `cta` turns a step card into a link to the action it describes. */
     steps: [
       {
         title: "נרשמות לאתר",
@@ -56,12 +57,13 @@ export const HOME = {
       {
         title: "מעלות קורות חיים",
         body: "PDF, Word, צילום מהנייד — או פשוט מקליטות. המערכת קוראת וממלאת את הפרטים בשבילך.",
+        cta: { href: "/submit-cv", label: "להעלאת קורות חיים" },
       },
       {
         title: "מתעדכנות לפני כל שליחה",
         body: "שום דבר לא נשלח למעסיק בלי שידעת. תמיד שואלים אותך קודם.",
       },
-    ],
+    ] as const,
   },
   about: {
     kickerEn: ["About ", "me"],

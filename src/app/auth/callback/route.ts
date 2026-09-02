@@ -3,7 +3,7 @@ import { adminConfigured, createAdminClient } from "@/lib/supabase/admin";
 import { createClient, supabaseConfigured } from "@/lib/supabase/server";
 import { normalizeEmail } from "@/lib/utils";
 
-/** OAuth / magic-link landing point: exchanges the code for a session cookie. */
+/** Google OAuth landing point: exchanges the code for a session cookie. */
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
@@ -44,8 +44,8 @@ export async function GET(request: Request) {
  * Turns an invite Chana wrote into real access.
  *
  * She approves an email before that person has ever signed in, so there is no
- * user row to flag at the time. The first sign-in with that address — password
- * or Google — is where the two halves meet.
+ * user row to flag at the time. The first Google sign-in with that address is
+ * where the two halves meet.
  *
  * This runs with the service role on purpose: the person signing in is not an
  * admin yet, so RLS would (correctly) hide `admin_invites` from their own

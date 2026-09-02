@@ -2,7 +2,7 @@ import Link from "next/link";
 
 /**
  * Full-bleed gradient backdrop with a centred white card — the frame used by
- * the login, register and profile screens in the mockups.
+ * the login and profile screens in the mockups.
  */
 export function AuthShell({
   icon,

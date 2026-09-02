@@ -2,7 +2,7 @@
 -- admin_invites — Chana grants back-office access by email.
 --
 -- An invite is written *before* the person has an account: she types an email,
--- and the next time someone signs in with it (password or Google) the auth
+-- and the next time someone signs in with it via Google, the auth
 -- callback reads this table and flips `app_users.is_admin`. That is why the key
 -- is the email and not a user id — there is nothing to reference yet.
 --

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { AuthShell } from "@/components/auth/AuthShell";
-import { LoginForm } from "@/components/auth/LoginForm";
+import { GoogleAuthPanel } from "@/components/auth/GoogleAuthPanel";
 
 export const metadata: Metadata = {
   title: "התחברות",
@@ -17,9 +17,9 @@ export default async function LoginPage({
     <AuthShell
       icon="thumb"
       title="כיף שאת פה - איתנו!"
-      subtitle="התחברי לאתר ותוכלי לצפות ולעדכן את פרופיל המשתמש שלך באתר."
+      subtitle="התחברי עם חשבון הגוגל שלך כדי לצפות ולעדכן את הפרופיל שלך."
     >
-      <LoginForm next={next} initialError={error} />
+      <GoogleAuthPanel next={next} initialError={error} />
     </AuthShell>
   );
 }

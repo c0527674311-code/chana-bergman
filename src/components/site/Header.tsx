@@ -85,6 +85,9 @@ export function Header({
             );
           })}
 
+          {/* Account menu only exists once signed in. A visitor has nothing to
+              manage, and sign-in is reached by direct link. */}
+          {user && (
           <div ref={userRef} className="relative">
             {/* -mx cancels most of the hover-pill padding so the visual gap
                 around this item matches the plain links beside it. */}
@@ -112,31 +115,23 @@ export function Header({
                 dir="rtl"
                 className="absolute left-0 top-full mt-1 w-60 rounded-[22px] bg-white p-2 shadow-[var(--shadow-pop)] ring-1 ring-ink/5"
               >
-                {user ? (
-                  <>
-                    <MenuItem href="/profile">הפרופיל שלי</MenuItem>
-                    <MenuItem href="/profile/edit">עריכת פרטים אישיים</MenuItem>
-                    {user.isAdmin && <MenuItem href="/admin">מערכת הניהול</MenuItem>}
-                    <hr className="my-2 border-ink/10" />
-                    <form action="/auth/signout" method="post">
-                      <button
-                        type="submit"
-                        role="menuitem"
-                        className="focus-brand w-full rounded-2xl px-4 py-2.5 text-start text-[15px] text-ink hover:bg-primary-50"
-                      >
-                        התנתקות
-                      </button>
-                    </form>
-                  </>
-                ) : (
-                  <>
-                    <MenuItem href="/login">התחברות</MenuItem>
-                    <MenuItem href="/register">הרשמה לאתר</MenuItem>
-                  </>
-                )}
+                <MenuItem href="/profile">הפרופיל שלי</MenuItem>
+                <MenuItem href="/profile/edit">עריכת פרטים אישיים</MenuItem>
+                {user.isAdmin && <MenuItem href="/admin">מערכת הניהול</MenuItem>}
+                <hr className="my-2 border-ink/10" />
+                <form action="/auth/signout" method="post">
+                  <button
+                    type="submit"
+                    role="menuitem"
+                    className="focus-brand w-full rounded-2xl px-4 py-2.5 text-start text-[15px] text-ink hover:bg-primary-50"
+                  >
+                    התנתקות
+                  </button>
+                </form>
               </div>
             )}
           </div>
+          )}
         </nav>
 
         <div className="ml-auto flex items-center gap-2 lg:ml-0">
@@ -205,11 +200,7 @@ export function Header({
                   </button>
                 </form>
               </>
-            ) : (
-              <Link href="/login" className="focus-brand rounded-2xl px-3 py-3 hover:bg-primary-50">
-                התחברות / הרשמה
-              </Link>
-            )}
+            ) : null}
             <ButtonLink href="/employers" variant="primary" size="md" className="mt-2 w-full">
               מעסיקים? כנסו
             </ButtonLink>

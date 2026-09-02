@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LogoMark } from "@/components/brand/Logo";
+import { Logo } from "@/components/brand/Logo";
 import { BRAND, CONTACT_DETAILS, FOOTER } from "@/lib/content/site";
 
 /**
@@ -18,15 +18,9 @@ export function Footer() {
         {/* One 12-column grid: brand · two link columns · contact */}
         <div className="grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-12">
           <div className="lg:col-span-5">
-            <div className="flex items-center gap-3">
-              <LogoMark className="h-12 w-auto" />
-              <span className="font-display text-[15px] leading-[1.08] tracking-[0.1em]" dir="ltr">
-                <span className="block font-medium">CHANA</span>
-                <span className="block font-medium">BERGMAN</span>
-              </span>
-            </div>
-            <p className="mt-3 text-[14px] text-mint">{BRAND.discipline}</p>
-            <p className="mt-5 max-w-sm text-[15px] leading-relaxed text-white/70">{FOOTER.blurb}</p>
+            {/* The real lock-up, knocked out for the navy panel */}
+            <Logo onDark />
+            <p className="mt-6 max-w-sm text-[15px] leading-relaxed text-white/70">{FOOTER.blurb}</p>
             <ul className="mt-6 flex flex-wrap gap-2">
               {BRAND.values.map((v) => (
                 <li

@@ -62,6 +62,8 @@ export function CampaignDialog({
   const [subject, setSubject] = useState(TEMPLATES[0].subject);
   const [body, setBody] = useState(TEMPLATES[0].body);
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
+  // What the server actually managed to send — not what was selected.
+  const [result, setResult] = useState<{ sent: number; failed: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -90,6 +92,7 @@ export function CampaignDialog({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "השליחה נכשלה.");
+      setResult({ sent: Number(json.sent ?? 0), failed: Number(json.failed ?? 0) });
       setState("sent");
     } catch (err) {
       setState("idle");
@@ -128,10 +131,34 @@ export function CampaignDialog({
 
         {state === "sent" ? (
           <div className="py-10 text-center">
-            <p className="text-[18px] font-bold text-navy">הדיוור נשלח ל-{recipients.length} נמענות.</p>
-            <p className="mt-2 text-[15px] text-ink/70">
-              אפשר לעקוב אחרי פתיחות ותגובות במסך הדיוור.
-            </p>
+            {/* This used to report `recipients.length` — how many were *selected*.
+                With no mail provider configured the server sends nothing and
+                returns sent: 0, yet the screen still announced a successful
+                send. Chana would then wait on replies to mail that never left. */}
+            {result && result.sent === 0 ? (
+              <>
+                <p className="text-[18px] font-bold text-navy">שום מייל לא נשלח.</p>
+                <p className="mx-auto mt-2 max-w-sm text-[15px] text-ink/70">
+                  הדיוור נשמר, אבל אין ספק דיוור מחובר למערכת — לכן {result.failed}{" "}
+                  {result.failed === 1 ? "נמענת לא קיבלה" : "נמענות לא קיבלו"} כלום.
+                  אחרי חיבור הספק אפשר לשלוח אותו שוב.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[18px] font-bold text-navy">
+                  הדיוור נשלח ל-{result?.sent ?? recipients.length} נמענות.
+                </p>
+                {result && result.failed > 0 && (
+                  <p className="mt-2 text-[15px] font-semibold text-amber-800">
+                    {result.failed} לא נשלחו.
+                  </p>
+                )}
+                <p className="mt-2 text-[15px] text-ink/70">
+                  אפשר לעקוב אחרי פתיחות ותגובות במסך הדיוור.
+                </p>
+              </>
+            )}
             <Button className="mt-6" withArrow={false} onClick={onClose}>
               סגירה
             </Button>

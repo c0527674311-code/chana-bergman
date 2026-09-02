@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { HeroVideo } from "@/components/site/HeroVideo";
@@ -162,9 +163,10 @@ export default async function HomePage() {
         <Section id="how-it-works">
           <SectionTitle en={HOME.howItWorks.kickerEn} subtitle={HOME.howItWorks.subtitle} />
           <ol className="mt-14 grid gap-6 md:grid-cols-3">
-            {HOME.howItWorks.steps.map((step, i) => (
-              <li key={step.title}>
-                <Card highlighted={i === 0} revealDelay={i * 140} className="h-full text-center">
+            {HOME.howItWorks.steps.map((step, i) => {
+              const cta = "cta" in step ? step.cta : null;
+              const body = (
+                <>
                   <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-mint text-navy">
                     <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" aria-hidden="true">
                       {STEP_ICONS[i]}
@@ -172,9 +174,36 @@ export default async function HomePage() {
                   </span>
                   <h3 className="mt-5 text-[19px] font-bold text-navy">{step.title}</h3>
                   <p className="mt-3 text-[15px] leading-relaxed text-ink/75">{step.body}</p>
-                </Card>
-              </li>
-            ))}
+                </>
+              );
+
+              // The upload step is the site's primary action, so its card is
+              // the button — the whole surface is clickable, not just a link.
+              return (
+                <li key={step.title}>
+                  {cta ? (
+                    <Link
+                      href={cta.href}
+                      data-reveal
+                      style={{ "--reveal-delay": `${i * 140}ms` } as React.CSSProperties}
+                      className="focus-brand group flex h-full flex-col rounded-[var(--radius-card)] bg-white p-8 text-center shadow-[0_10px_40px_-28px_rgb(28_28_60_/_0.4)] ring-2 ring-transparent transition-all hover:-translate-y-1 hover:shadow-[var(--shadow-card)] hover:ring-mint"
+                    >
+                      {body}
+                      <span className="mt-5 inline-flex items-center justify-center gap-1.5 text-[15px] font-bold text-primary">
+                        {cta.label}
+                        <span aria-hidden="true" className="transition-transform group-hover:-translate-x-1">
+                          &rsaquo;
+                        </span>
+                      </span>
+                    </Link>
+                  ) : (
+                    <Card highlighted={i === 0} revealDelay={i * 140} className="h-full text-center">
+                      {body}
+                    </Card>
+                  )}
+                </li>
+              );
+            })}
           </ol>
         </Section>
 
