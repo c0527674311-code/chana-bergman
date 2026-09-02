@@ -45,9 +45,22 @@ export default async function CampaignsPage() {
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[30px] font-extrabold text-navy">דיוור קבוצתי</h1>
+          {/* Promised "no need for an external mailing system" unconditionally,
+              directly above a warning saying nothing can be sent at all. Say
+              what is true right now instead. */}
           <p className="mt-2 max-w-2xl text-[16px] text-ink/70">
-            הדיוור נשלח מתוך המערכת — בוחרים מועמדות במסך האיתור או במאגר, ולוחצים
-            &quot;שליחת מייל&quot;. אין צורך להיכנס למערכת דיוור חיצונית.
+            {provider === "none" ? (
+              <>
+                בוחרים מועמדות במסך האיתור או במאגר, ולוחצים &quot;שליחת מייל&quot;. הבחירה
+                והנוסח נשמרים — אבל <strong className="text-navy">כרגע מיילים לא יוצאים</strong>,
+                כי עדיין לא חובר ספק דיוור.
+              </>
+            ) : (
+              <>
+                הדיוור נשלח מתוך המערכת — בוחרים מועמדות במסך האיתור או במאגר, ולוחצים
+                &quot;שליחת מייל&quot;. אין צורך להיכנס למערכת דיוור חיצונית.
+              </>
+            )}
           </p>
         </div>
         <ButtonLink href="/admin/match" size="md">

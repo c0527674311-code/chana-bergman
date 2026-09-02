@@ -42,8 +42,7 @@ export default async function AdminDashboard() {
         >
           <h2 className="text-[22px] font-bold">איתור מיידי לפי דרישה</h2>
           <p className="mt-2 max-w-md text-[15px] leading-relaxed text-white/85">
-            הדביקי את הדרישה כפי שהמעסיק שלח, וקבלי רשימה מדורגת עם הסבר לכל מועמדת — ואז
-            שלחי להן מייל בלחיצה.
+            הדביקי את הדרישה כפי שהמעסיק שלח, וקבלי רשימה מדורגת עם הסבר לכל מועמדת.
           </p>
           <span className="mt-5 inline-block rounded-full bg-white px-5 py-2.5 text-[15px] font-bold text-primary">
             פתחי דרישה חדשה &gt;
