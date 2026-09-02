@@ -45,8 +45,10 @@ function ArrowBadge({ size, variant }: { size: Size; variant: Variant }) {
       aria-hidden="true"
     >
       <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5">
+        {/* Points up-LEFT. The site reads right-to-left, so "forward" is
+            leftward — a ↗ here pointed back the way the reader came. */}
         <path
-          d="M4.5 11.5 11.5 4.5M11.5 4.5H6M11.5 4.5V10"
+          d="M11.5 11.5 4.5 4.5M4.5 4.5H10M4.5 4.5V10"
           stroke="currentColor"
           strokeWidth="1.7"
           strokeLinecap="round"

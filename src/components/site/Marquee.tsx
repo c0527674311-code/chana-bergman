@@ -54,7 +54,7 @@ export function TagMarquee({
       <span className="grid h-6 w-6 place-items-center rounded-full bg-mint-100 text-navy">
         <svg viewBox="0 0 16 16" fill="none" className="h-3 w-3" aria-hidden="true">
           <path
-            d="M4.5 11.5 11.5 4.5M11.5 4.5H6M11.5 4.5V10"
+            d="M11.5 11.5 4.5 4.5M4.5 4.5H10M4.5 4.5V10"
             stroke="currentColor"
             strokeWidth="1.7"
             strokeLinecap="round"
