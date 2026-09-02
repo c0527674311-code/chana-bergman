@@ -13,7 +13,7 @@ export function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="mt-10 rounded-t-[var(--radius-panel)] bg-navy text-white">
+    <footer className="mx-[var(--page-gutter)] mt-10 mb-[var(--page-gutter)] rounded-[var(--radius-panel)] bg-navy text-white">
       <div className="mx-auto max-w-[1400px] px-5 py-16 lg:px-10 lg:py-20">
         {/* One 12-column grid: brand · two link columns · contact */}
         <div className="grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-12">

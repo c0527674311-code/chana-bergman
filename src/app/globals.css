@@ -42,8 +42,19 @@
   --radius-card: 28px;
   --radius-panel: 40px;
 
+  /* Every tinted band — the grey sections and the navy footer — sits inset from
+     the viewport edge by this much, so the panel rounding actually reads and the
+     page keeps one consistent margin instead of full-bleed colour blocks. */
+  --page-gutter: 1rem;
+
   --shadow-card: 0 18px 50px -24px rgb(28 28 60 / 0.28);
   --shadow-pop: 0 12px 34px -14px rgb(28 28 60 / 0.22);
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --page-gutter: 1.75rem;
+  }
 }
 
 /* Brand font: place PingHL-Regular.woff2 / PingHL-Bold.woff2 in /public/fonts

@@ -11,11 +11,17 @@ export function Section({
   tone?: "plain" | "canvas" | "gradient";
   id?: string;
 }) {
+  const tinted = tone === "canvas" || tone === "gradient";
+
   return (
     <section
       id={id}
       className={cn(
         "px-5 py-20 lg:px-10 lg:py-28",
+        // A tinted band is a panel, not a full-bleed stripe: inset it by the
+        // shared page gutter so its rounding is visible and every coloured
+        // block on the site lines up on the same vertical edge.
+        tinted && "mx-[var(--page-gutter)] rounded-[var(--radius-panel)]",
         tone === "canvas" && "bg-canvas",
         tone === "gradient" && "bg-gradient-to-bl from-[var(--color-grad-from)] to-[var(--color-grad-to)] text-white",
         className,

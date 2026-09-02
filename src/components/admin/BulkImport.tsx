@@ -118,8 +118,14 @@ export function BulkImport() {
     acc[f.status] = (acc[f.status] ?? 0) + 1;
     return acc;
   }, {});
+  // Every terminal state counts toward progress — leaving "unparsed" out left
+  // the bar stuck short of 100% on any folder that had an unreadable file.
   const progress = files.length
-    ? Math.round((((counts.done ?? 0) + (counts.merged ?? 0) + (counts.failed ?? 0)) / files.length) * 100)
+    ? Math.round(
+        (((counts.done ?? 0) + (counts.merged ?? 0) + (counts.unparsed ?? 0) + (counts.failed ?? 0)) /
+          files.length) *
+          100,
+      )
     : 0;
 
   return (
