@@ -248,7 +248,7 @@ export function scoreCandidate(
 
   if (req.region) {
     max += WEIGHTS.region;
-    if (candidate.preferred_region === req.region || candidate.city === req.region) {
+    if ((candidate.preferred_regions ?? []).includes(req.region) || candidate.city === req.region) {
       score += WEIGHTS.region;
     }
   }
@@ -300,7 +300,7 @@ function buildReason(
     );
   }
   if (req.seniority && c.seniority === req.seniority) parts.push(c.seniority);
-  if (req.region && (c.preferred_region === req.region || c.city === req.region)) {
+  if (req.region && ((c.preferred_regions ?? []).includes(req.region) || c.city === req.region)) {
     parts.push("אזור " + req.region);
   }
   let line = parts.length ? parts.join(" · ") : "התאמה חלקית";

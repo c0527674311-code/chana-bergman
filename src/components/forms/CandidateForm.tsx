@@ -48,7 +48,7 @@ export function CandidateForm({
     if (f.email) next.email = f.email as string;
     if (f.phone) next.phone = f.phone as string;
     if (f.city) next.city = f.city as string;
-    if (f.preferred_region) next.preferred_region = f.preferred_region as string;
+    if (f.preferred_regions) next.preferred_regions = f.preferred_regions as string[];
     if (f.experience_years) next.experience_years = f.experience_years as string;
     if ((f.programming_languages as string[])?.length)
       next.programming_languages = f.programming_languages as string[];

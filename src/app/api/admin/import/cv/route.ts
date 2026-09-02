@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       email,
       phone,
       city: parsed?.city ?? null,
-      preferred_region: parsed?.preferred_region ?? null,
+      preferred_regions: parsed?.preferred_region ? [parsed.preferred_region] : null,
       programming_languages: union(parsed?.programming_languages, fromFolder.programmingLanguages),
       technologies: union(parsed?.technologies, fromFolder.technologies),
       spoken_languages: parsed?.spoken_languages ?? [],

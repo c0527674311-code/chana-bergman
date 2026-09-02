@@ -98,7 +98,7 @@ export function extractFromTranscript(transcript: string): Partial<Candidate> {
   }
   for (const region of REGIONS) {
     if (t.includes(`אזור ה${region}`) || t.includes(`אזור ${region}`) || t.includes(`ב${region}`)) {
-      out.preferred_region = region;
+      out.preferred_regions = [region];
       break;
     }
   }

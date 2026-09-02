@@ -15,7 +15,7 @@ export type Candidate = {
   email: string | null;
   phone: string | null;
   city: string | null;
-  preferred_region: string | null;
+  preferred_regions: string[] | null;
   spoken_languages: string[];
   programming_languages: string[];
   technologies: string[];

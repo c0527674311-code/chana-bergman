@@ -30,7 +30,7 @@ export async function POST(request: Request) {
       email: r.candidate.email,
       phone: r.candidate.phone,
       city: r.candidate.city,
-      region: r.candidate.preferred_region,
+      region: r.candidate.preferred_regions?.join(" · ") ?? null,
       seniority: r.candidate.seniority,
       experience: r.candidate.experience_years,
       institution: r.candidate.institution,

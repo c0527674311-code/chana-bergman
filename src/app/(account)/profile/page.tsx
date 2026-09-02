@@ -74,7 +74,7 @@ export default async function ProfilePage() {
                 <Row label="מייל" value={candidate.email} ltr />
                 <Row label="טלפון" value={candidate.phone} ltr />
                 <Row label="גרה ב" value={candidate.city} />
-                <Row label="מחפשת עבודה באזור" value={candidate.preferred_region} />
+                <Row label="מחפשת עבודה באזור" value={candidate.preferred_regions?.join(" · ")} />
                 <Row label="שנות ניסיון" value={candidate.experience_years} />
                 <Row label="שפות תכנות" value={candidate.programming_languages?.join(", ")} />
                 <Row label="טכנולוגיות" value={candidate.technologies?.join(", ")} />

@@ -43,7 +43,7 @@ export default async function CandidatesPage({
             email: c.email,
             phone: c.phone,
             city: c.city,
-            region: c.preferred_region,
+            region: c.preferred_regions?.join(" · ") ?? null,
             experience: c.experience_years,
             seniority: c.seniority,
             institution: c.institution,

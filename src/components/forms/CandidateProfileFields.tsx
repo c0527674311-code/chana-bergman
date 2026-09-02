@@ -83,11 +83,11 @@ export function CandidateProfileFields({
           defaultValue={candidate?.experience_years ?? ""}
         />
         <Select label="גרה ב.." name="city" options={CITIES} defaultValue={candidate?.city ?? ""} />
-        <Select
+        <MultiSelect
           label="מעוניינת למצוא עבודה באזור"
-          name="preferred_region"
+          name="preferred_regions"
           options={REGIONS}
-          defaultValue={candidate?.preferred_region ?? ""}
+          defaultValue={candidate?.preferred_regions ?? []}
         />
       </div>
 

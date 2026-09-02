@@ -32,7 +32,7 @@ export async function listCandidates(
 
   if (filters.status) query = query.eq("status", filters.status);
   if (filters.seniority) query = query.eq("seniority", filters.seniority);
-  if (filters.region) query = query.eq("preferred_region", filters.region);
+  if (filters.region) query = query.overlaps("preferred_regions", [filters.region]);
   if (filters.experience) query = query.eq("experience_years", filters.experience);
   if (filters.institution) query = query.eq("institution", filters.institution);
   if (filters.cohort) query = query.eq("cohort_year", Number(filters.cohort));
@@ -56,7 +56,7 @@ function filterInMemory(rows: Candidate[], f: CandidateFilters): Candidate[] {
   return rows.filter((r) => {
     if (f.status && r.status !== f.status) return false;
     if (f.seniority && r.seniority !== f.seniority) return false;
-    if (f.region && r.preferred_region !== f.region) return false;
+    if (f.region && !(r.preferred_regions ?? []).includes(f.region)) return false;
     if (f.experience && r.experience_years !== f.experience) return false;
     if (f.institution && r.institution !== f.institution) return false;
     if (f.cohort && String(r.cohort_year) !== f.cohort) return false;

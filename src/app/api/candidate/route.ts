@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     email,
     phone: phoneRaw || null,
     city: String(form.get("city") ?? "").trim() || null,
-    preferred_region: String(form.get("preferred_region") ?? "").trim() || null,
+    preferred_regions: arrayField(form, "preferred_regions"),
     spoken_languages: arrayField(form, "spoken_languages"),
     programming_languages: arrayField(form, "programming_languages"),
     technologies: arrayField(form, "technologies"),

@@ -29,7 +29,7 @@ function c(
     email: `candidate${i}@example.com`,
     phone: `05${(i % 9) + 1}${String(1000000 + i * 7919).slice(0, 7)}`,
     city,
-    preferred_region: region,
+    preferred_regions: [region],
     spoken_languages: i % 3 === 0 ? ["עברית", "אנגלית"] : ["עברית"],
     programming_languages: langs,
     technologies: tech,
