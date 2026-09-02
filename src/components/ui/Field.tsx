@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -87,6 +87,124 @@ export function Select({
           </option>
         ))}
       </select>
+      <ErrorText id={errId}>{error}</ErrorText>
+    </div>
+  );
+}
+
+/**
+ * Multi-value picker styled like Select: a pill button that opens a checkbox
+ * panel. Selected values are submitted as repeated hidden inputs, so
+ * FormData.getAll(name) on the server sees a plain string array.
+ */
+export function MultiSelect({
+  label,
+  name,
+  options,
+  defaultValue = [],
+  error,
+  className,
+}: CommonProps & {
+  name: string;
+  options: readonly string[];
+  defaultValue?: readonly string[];
+}) {
+  const id = useId();
+  const errId = `${id}-err`;
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string[]>(() =>
+    defaultValue.filter((v) => options.includes(v)),
+  );
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [open]);
+
+  function toggle(value: string) {
+    setSelected((cur) =>
+      cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value],
+    );
+  }
+
+  return (
+    <div ref={rootRef} className={cn("relative", className)}>
+      <button
+        type="button"
+        id={id}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-invalid={!!error || undefined}
+        aria-describedby={error ? errId : undefined}
+        className={cn(
+          fieldBase,
+          "flex items-center justify-between gap-3 text-start",
+          error && "border-red-400",
+        )}
+      >
+        <span className={cn("truncate", selected.length === 0 && "text-ink/70")}>
+          {selected.length === 0 ? label : selected.join(", ")}
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          {selected.length > 1 && (
+            <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[12px] font-bold text-primary">
+              {selected.length}
+            </span>
+          )}
+          <svg
+            viewBox="0 0 14 8"
+            fill="none"
+            className={cn("h-2 w-3 text-ink/60 transition-transform", open && "rotate-180")}
+            aria-hidden="true"
+          >
+            <path d="M1 1l6 6 6-6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </span>
+      </button>
+
+      {selected.map((v) => (
+        <input key={v} type="hidden" name={name} value={v} />
+      ))}
+
+      {open && (
+        <div
+          role="listbox"
+          aria-label={label}
+          aria-multiselectable="true"
+          className="absolute inset-x-0 top-full z-20 mt-2 max-h-60 overflow-y-auto rounded-[22px] bg-white p-2 shadow-[var(--shadow-pop)] ring-1 ring-ink/10"
+        >
+          {options.map((o) => {
+            const checked = selected.includes(o);
+            return (
+              <label
+                key={o}
+                className="flex cursor-pointer items-center gap-2.5 rounded-2xl px-4 py-2 text-[15px] text-ink hover:bg-primary-50"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggle(o)}
+                  className="focus-brand h-4 w-4 shrink-0 rounded accent-[var(--color-primary)]"
+                />
+                <span>{o}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
       <ErrorText id={errId}>{error}</ErrorText>
     </div>
   );

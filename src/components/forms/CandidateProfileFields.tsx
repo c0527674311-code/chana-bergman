@@ -1,6 +1,6 @@
 "use client";
 
-import { Input, RadioRow, Select, Textarea } from "@/components/ui/Field";
+import { Input, MultiSelect, RadioRow, Select, Textarea } from "@/components/ui/Field";
 import {
   CITIES,
   EXPERIENCE_YEARS,
@@ -58,23 +58,23 @@ export function CandidateProfileFields({
           dir="ltr"
           defaultValue={candidate?.phone ?? ""}
         />
-        <Select
+        <MultiSelect
           label="דוברת שפה.."
           name="spoken_languages"
           options={SPOKEN_LANGUAGES}
-          defaultValue={candidate?.spoken_languages?.[0] ?? ""}
+          defaultValue={candidate?.spoken_languages ?? []}
         />
-        <Select
+        <MultiSelect
           label="מתמחה בשפת תכנות.."
           name="programming_languages"
           options={PROGRAMMING_LANGUAGES}
-          defaultValue={candidate?.programming_languages?.[0] ?? ""}
+          defaultValue={candidate?.programming_languages ?? []}
         />
-        <Select
+        <MultiSelect
           label="מתמחה בטכנולוגיית.."
           name="technologies"
           options={TECHNOLOGIES}
-          defaultValue={candidate?.technologies?.[0] ?? ""}
+          defaultValue={candidate?.technologies ?? []}
         />
         <Select
           label="מס’ שנות ניסיון"
