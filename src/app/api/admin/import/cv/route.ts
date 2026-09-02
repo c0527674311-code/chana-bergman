@@ -156,6 +156,11 @@ export async function POST(request: Request) {
       candidateId,
       merged,
       needsReview: parsed?.confidence === "low" || Boolean(parseError),
+      // The row is written either way — a file is never dropped. But when the
+      // scan failed the row is *empty*, and reporting that as "נקלט" told Chana
+      // a folder had imported cleanly while it produced blank records.
+      parsed: Boolean(parsed),
+      parseError,
     });
   } catch (err) {
     console.error("cv import failed:", file.name, err);

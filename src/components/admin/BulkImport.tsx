@@ -3,7 +3,11 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 
-type FileState = { name: string; status: "queued" | "uploading" | "done" | "merged" | "failed"; error?: string };
+type FileState = {
+  name: string;
+  status: "queued" | "uploading" | "done" | "merged" | "unparsed" | "failed";
+  error?: string;
+};
 
 const CV_EXT = /\.(pdf|docx?|rtf|txt|odt|pages|png|jpe?g|heic|webp)$/i;
 
@@ -33,6 +37,7 @@ export function BulkImport() {
     setRunning(true);
     let done = 0;
     let merged = 0;
+    let unparsed = 0;
     let failed = 0;
 
     // Sequential with a small concurrency window keeps memory flat on a
@@ -54,8 +59,14 @@ export function BulkImport() {
           const res = await fetch("/api/admin/import/cv", { method: "POST", body });
           const json = await res.json();
           if (!res.ok) throw new Error(json.error ?? "נכשל");
-          const status: FileState["status"] = json.merged ? "merged" : "done";
-          if (json.merged) merged++;
+          // Stored but unreadable is its own outcome — not a success.
+          const status: FileState["status"] = json.parsed === false
+            ? "unparsed"
+            : json.merged
+              ? "merged"
+              : "done";
+          if (status === "unparsed") unparsed++;
+          else if (json.merged) merged++;
           else done++;
           setFiles((prev) => prev.map((f, i) => (i === index ? { ...f, status } : f)));
         } catch (err) {
@@ -74,7 +85,9 @@ export function BulkImport() {
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
     setRunning(false);
     setSummary(
-      `הסתיים: ${chosen.length} קבצים · ${done} נקלטו · ${merged} כפולות מוזגו · ${failed} נכשלו.`,
+      `הסתיים: ${chosen.length} קבצים · ${done} נקלטו · ${merged} כפולות מוזגו` +
+        (unparsed ? ` · ${unparsed} נשמרו אך לא נקראו` : "") +
+        ` · ${failed} נכשלו.`,
     );
   }
 
@@ -204,6 +217,7 @@ function StatusPill({ status, error }: { status: FileState["status"]; error?: st
     uploading: { label: "מעלה…", cls: "bg-primary-100 text-primary-700" },
     done: { label: "נקלט", cls: "bg-mint-100 text-navy" },
     merged: { label: "מוזג", cls: "bg-amber-100 text-amber-800" },
+    unparsed: { label: "נשמר — לא נקרא", cls: "bg-amber-100 text-amber-900" },
     failed: { label: "נכשל", cls: "bg-red-100 text-red-700" },
   };
   const s = map[status];
