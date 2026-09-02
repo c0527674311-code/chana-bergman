@@ -12,6 +12,7 @@ const ITEMS = [
   { href: "/admin/campaigns", label: "דיוור קבוצתי" },
   { href: "/admin/posts", label: "ניהול הבלוג" },
   { href: "/admin/import", label: "ייבוא מסיבי" },
+  { href: "/admin/team", label: "ניהול צוות" },
 ];
 
 export function AdminNav() {

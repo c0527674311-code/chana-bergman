@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { adminConfigured, createAdminClient } from "@/lib/supabase/admin";
 import { createClient, supabaseConfigured } from "@/lib/supabase/server";
+import { normalizeEmail } from "@/lib/utils";
 
 /** OAuth / magic-link landing point: exchanges the code for a session cookie. */
 export async function GET(request: Request) {
@@ -31,7 +33,45 @@ export async function GET(request: Request) {
       },
       { onConflict: "id", ignoreDuplicates: true },
     );
+
+    await claimAdminInvite(user.id, user.email);
   }
 
   return NextResponse.redirect(new URL(next, url.origin));
+}
+
+/**
+ * Turns an invite Chana wrote into real access.
+ *
+ * She approves an email before that person has ever signed in, so there is no
+ * user row to flag at the time. The first sign-in with that address — password
+ * or Google — is where the two halves meet.
+ *
+ * This runs with the service role on purpose: the person signing in is not an
+ * admin yet, so RLS would (correctly) hide `admin_invites` from their own
+ * session and the invite would never be found.
+ */
+async function claimAdminInvite(userId: string, rawEmail: string | undefined) {
+  const email = normalizeEmail(rawEmail ?? "");
+  if (!email || !adminConfigured()) return;
+
+  try {
+    const admin = createAdminClient();
+    const { data: invite } = await admin
+      .from("admin_invites")
+      .select("email")
+      .eq("email", email)
+      .maybeSingle();
+    if (!invite) return;
+
+    await admin.from("app_users").update({ is_admin: true }).eq("id", userId);
+    await admin
+      .from("admin_invites")
+      .update({ accepted_at: new Date().toISOString() })
+      .eq("email", email);
+  } catch (err) {
+    // Never block a legitimate sign-in over this — she can re-grant from the
+    // team screen, and the person is simply not an admin until then.
+    console.error("admin invite claim failed:", email, err);
+  }
 }
