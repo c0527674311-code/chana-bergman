@@ -47,3 +47,4 @@ next-env.d.ts
 /.supabase-db-password.txt
 /.admin-password.txt
 /supabase/.temp/
+/.admin-passwords.txt
