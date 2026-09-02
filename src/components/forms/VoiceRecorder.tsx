@@ -36,7 +36,7 @@ declare global {
   }
 }
 
-type Phase = "idle" | "recording" | "unsupported" | "denied";
+type Phase = "idle" | "recording" | "unsupported" | "denied" | "empty";
 
 export function VoiceRecorder({
   onTranscript,
@@ -121,11 +121,21 @@ export function VoiceRecorder({
     activeRef.current = false;
     recRef.current?.stop();
     if (timerRef.current) clearInterval(timerRef.current);
-    setPhase("idle");
+
+    // Chrome often has not promoted the last phrase to `isFinal` by the time she
+    // presses stop. Dropping `interim` here threw away whole short recordings.
+    const transcript = [finalRef.current, interim].join(" ").trim();
     setInterim("");
 
-    const transcript = finalRef.current.trim();
-    if (transcript.length >= 10) onTranscript(transcript);
+    if (transcript.length < 10) {
+      // Previously this returned silently: she spoke, pressed stop, and nothing
+      // whatsoever happened. Say what went wrong instead.
+      setPhase("empty");
+      return;
+    }
+
+    setPhase("idle");
+    onTranscript(transcript);
   }
 
   if (phase === "unsupported") {
@@ -142,6 +152,21 @@ export function VoiceRecorder({
       <p className="rounded-2xl bg-amber-50 px-4 py-3 text-[13.5px] leading-relaxed text-amber-900 ring-1 ring-amber-200">
         הדפדפן חסם את הגישה למיקרופון. אפשרי אותה בהגדרות האתר ונסי שוב, או העלי קובץ במקום.
       </p>
+    );
+  }
+
+  if (phase === "empty") {
+    return (
+      <div className="rounded-2xl bg-amber-50 px-4 py-3 text-[13.5px] leading-relaxed text-amber-900 ring-1 ring-amber-200">
+        <p>לא קלטנו דיבור בהקלטה. ודאי שהמיקרופון פועל ושדיברת אחרי הלחיצה, ונסי שוב.</p>
+        <button
+          type="button"
+          onClick={start}
+          className="focus-brand mt-2 rounded-full bg-navy px-4 py-1.5 text-[13.5px] font-bold text-white hover:bg-ink"
+        >
+          להקליט שוב
+        </button>
+      </div>
     );
   }
 

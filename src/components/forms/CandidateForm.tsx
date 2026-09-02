@@ -234,9 +234,19 @@ export function CandidateForm({
           הפרטים מולאו אוטומטית — עברי עליהם, תקני אם צריך, ואשרי למטה.
         </p>
       )}
-      {(scan === "failed" || scan === "unavailable") && (
+      {scan === "failed" && (
         <p role="status" className="mt-2 rounded-2xl bg-canvas px-4 py-2.5 text-[14px] text-ink/70">
-          לא הצלחנו למלא אוטומטית מהקובץ — אפשר למלא את הפרטים ידנית, הקובץ עצמו יישלח כרגיל.
+          לא הצלחנו לקרוא את הקובץ אוטומטית — אפשר למלא את הפרטים ידנית, הקובץ עצמו יישלח כרגיל.
+        </p>
+      )}
+      {/* 503 from /api/parse-cv means the scan is switched off server-side (no
+          ANTHROPIC_API_KEY), not that this particular file was unreadable.
+          Saying "we could not read your file" there sends candidates off to
+          re-export and re-upload a file that was never the problem. */}
+      {scan === "unavailable" && (
+        <p role="status" className="mt-2 rounded-2xl bg-canvas px-4 py-2.5 text-[14px] text-ink/70">
+          המילוי האוטומטי כבוי כרגע — לא משהו בקובץ שלך. מלאי את הפרטים ידנית,
+          והקובץ עצמו יישלח ויישמר כרגיל.
         </p>
       )}
       {scan === "voice-fallback" && (
