@@ -17,6 +17,7 @@ type SpeechRecognitionLike = {
   continuous: boolean;
   interimResults: boolean;
   onresult: ((event: SpeechResultEvent) => void) | null;
+  onstart: (() => void) | null;
   onerror: ((event: { error?: string }) => void) | null;
   onend: (() => void) | null;
   start(): void;
@@ -36,7 +37,7 @@ declare global {
   }
 }
 
-type Phase = "idle" | "recording" | "unsupported" | "denied" | "empty";
+type Phase = "idle" | "starting" | "recording" | "unsupported" | "denied" | "empty";
 
 export function VoiceRecorder({
   onTranscript,
@@ -50,6 +51,10 @@ export function VoiceRecorder({
   const [finalText, setFinalText] = useState("");
   const [interim, setInterim] = useState("");
   const [seconds, setSeconds] = useState(0);
+  // Why recognition produced nothing. Without this every failure — no mic,
+  // Hebrew unsupported, speech service unreachable — looked identical to
+  // "you said nothing", and there was no way to act on it.
+  const [failure, setFailure] = useState<string | null>(null);
 
   const recRef = useRef<SpeechRecognitionLike | null>(null);
   const activeRef = useRef(false);
@@ -67,9 +72,28 @@ export function VoiceRecorder({
     };
   }, []);
 
-  function start() {
+  async function start() {
     const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Ctor) return;
+
+    // Ask for the microphone explicitly first.
+    //
+    // Recognition used to be started straight away and the UI flipped to
+    // "recording" on the same line. But the permission prompt is asynchronous:
+    // if she never answered it, the browser fired neither onstart nor onerror —
+    // so a timer ran, nothing was captured, and there was no error to report.
+    // getUserMedia gives a definite yes/no before anything else happens.
+    setPhase("starting");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Recognition opens its own capture; release this one immediately.
+      stream.getTracks().forEach((t) => t.stop());
+    } catch (err) {
+      const name = err instanceof Error ? err.name : "";
+      setFailure(name === "NotFoundError" ? "audio-capture" : "not-allowed");
+      setPhase(name === "NotFoundError" ? "empty" : "denied");
+      return;
+    }
 
     const rec = new Ctor();
     rec.lang = "he-IL";
@@ -88,11 +112,21 @@ export function VoiceRecorder({
     };
 
     rec.onerror = (event) => {
-      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      const code = event.error ?? "unknown";
+      setFailure(code);
+
+      if (code === "not-allowed" || code === "service-not-allowed") {
         activeRef.current = false;
         setPhase("denied");
+        return;
       }
-      // "no-speech" and friends are non-fatal — onend restarts.
+      // These cannot recover by restarting, and letting onend retry forever
+      // just spins until she gives up. Stop and let stop() explain.
+      if (code === "audio-capture" || code === "network" || code === "language-not-supported") {
+        activeRef.current = false;
+        return;
+      }
+      // "no-speech" and "aborted" are normal mid-dictation — onend restarts.
     };
 
     // Chrome ends recognition after silence; keep going until she presses stop.
@@ -109,11 +143,18 @@ export function VoiceRecorder({
     finalRef.current = "";
     setFinalText("");
     setInterim("");
+    setFailure(null);
     setSeconds(0);
     activeRef.current = true;
     recRef.current = rec;
-    setPhase("recording");
-    timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+    // The badge and the timer wait for the engine to confirm it is listening,
+    // so "מקליטה…" always means audio is actually being captured.
+    rec.onstart = () => {
+      setPhase("recording");
+      if (!timerRef.current) {
+        timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+      }
+    };
     rec.start();
   }
 
@@ -156,9 +197,21 @@ export function VoiceRecorder({
   }
 
   if (phase === "empty") {
+    // Say which wall we hit. "Try again" is useless advice when the browser
+    // has no microphone, cannot reach the speech service, or does not speak
+    // Hebrew — each of those needs a different action from her.
+    const explanation =
+      failure === "audio-capture"
+        ? "לא נמצא מיקרופון פעיל במחשב. בדקי שהוא מחובר ושהוא נבחר בהגדרות הקול, ונסי שוב."
+        : failure === "network"
+          ? "הדפדפן לא הצליח להגיע לשירות התמלול. בדקי את החיבור לאינטרנט ונסי שוב — או פשוט העלי קובץ במקום."
+          : failure === "language-not-supported"
+            ? "הדפדפן הזה לא תומך בתמלול עברית. ב-Chrome זה עובד — או שאפשר להעלות קובץ במקום."
+            : "לא קלטנו דיבור בהקלטה. ודאי שהמיקרופון פועל ושדיברת אחרי הלחיצה, ונסי שוב.";
+
     return (
       <div className="rounded-2xl bg-amber-50 px-4 py-3 text-[13.5px] leading-relaxed text-amber-900 ring-1 ring-amber-200">
-        <p>לא קלטנו דיבור בהקלטה. ודאי שהמיקרופון פועל ושדיברת אחרי הלחיצה, ונסי שוב.</p>
+        <p>{explanation}</p>
         <button
           type="button"
           onClick={start}
@@ -208,7 +261,7 @@ export function VoiceRecorder({
     <button
       type="button"
       onClick={start}
-      disabled={disabled}
+      disabled={disabled || phase === "starting"}
       className="focus-brand flex w-full items-center justify-center gap-3 rounded-[22px] border-2 border-dashed border-ink/20 bg-white px-5 py-4 transition-colors hover:border-primary/50 disabled:opacity-50"
     >
       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-mint text-navy">
@@ -216,7 +269,7 @@ export function VoiceRecorder({
       </span>
       <span className="text-start">
         <span className="block text-[15px] font-bold text-primary">
-          או ספרי לנו בקול — ואנחנו נמלא &gt;
+          {phase === "starting" ? "מבקש גישה למיקרופון…" : "או ספרי לנו בקול — ואנחנו נמלא >"}
         </span>
         <span className="block text-[13px] text-ink/60">
           מקליטים, המערכת ממלאת את השדות, ואת רק מתקנת
