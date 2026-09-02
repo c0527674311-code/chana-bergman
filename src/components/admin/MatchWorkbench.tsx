@@ -150,7 +150,12 @@ export function MatchWorkbench() {
         <section className="rounded-[var(--radius-card)] bg-white p-6 shadow-[0_10px_40px_-30px_rgb(28_28_60_/_0.4)]">
           <div className="flex flex-wrap items-center justify-between gap-4 pb-4">
             <p className="text-[15px] text-ink/70">
-              <strong className="text-navy">{rows.length}</strong> מועמדות מתאימות מתוך {total} במאגר
+              {/* Every candidate is ranked and returned, so "N מתאימות" used to
+                  report the whole database as matching — it read as "you have 5
+                  candidates for this role" when three of them matched nothing.
+                  Count the ones that actually hit a required skill. */}
+              <strong className="text-navy">{rows.filter((r) => r.matched.length > 0).length}</strong>{" "}
+              מועמדות עם התאמה · {rows.length} מדורגות מתוך {total} במאגר
               {selected.size > 0 && <> · נבחרו {selected.size}</>}
             </p>
             <div className="flex flex-wrap items-center gap-2">

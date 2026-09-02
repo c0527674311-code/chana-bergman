@@ -54,6 +54,25 @@ const ALIASES: Record<string, string> = {
   ml: "Machine Learning",
   ai: "Machine Learning",
   qa: "QA Automation",
+  // Hebrew spellings Chana actually receives. The .NET family matters most:
+  // it is the stack the seminaries teach, and "דוט נט" matched nothing before.
+  "דוט נט": ".NET",
+  "דוטנט": ".NET",
+  "דוט נט קור": ".NET Core",
+  "נט קור": ".NET Core",
+  "איי אס פי": "ASP.NET",
+  "סי שארפ": "C#",
+  "אס קיו אל סרבר": "SQL Server",
+  "אס קיו אל": "SQL",
+  "טייפסקריפט": "TypeScript",
+  "ריאקט נייטיב": "React Native",
+  "נקסט": "Next.js",
+  "ג׳נגו": "Django",
+  "ג'נגו": "Django",
+  "דוקר": "Docker",
+  "קוברנטיס": "Kubernetes",
+  "יוניטי": "Unity",
+  "וורדפרס": "WordPress",
   "אוטומציה": "QA Automation",
   devops: "DevOps",
   "סייבר": "Cyber Security",
@@ -97,15 +116,33 @@ const HEBREW = /[֐-׿]/;
  *  - Hebrew terms take inseparable one-letter prefixes (ה/ב/ל/מ/ו/ש/כ), so
  *    "אזור המרכז" must still match the region "מרכז".
  */
-function mentions(haystack: string, needle: string): boolean {
+function termPattern(needle: string): RegExp | null {
   const n = norm(needle);
-  if (!n) return false;
+  if (!n) return null;
   const escaped = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const prefix = HEBREW.test(n) ? "[הבלמושכ]?" : "";
   return new RegExp(
     `(^|[^\\p{L}\\p{N}#+])${prefix}${escaped}([^\\p{L}\\p{N}#+]|$)`,
-    "iu",
-  ).test(haystack);
+    "giu",
+  );
+}
+
+function mentions(haystack: string, needle: string): boolean {
+  const re = termPattern(needle);
+  return re ? re.test(haystack) : false;
+}
+
+/**
+ * Blank out every occurrence of `needle`, keeping the surrounding boundary
+ * characters so neighbouring terms still match. Used to let a longer term
+ * consume its own text before shorter ones are tested against what is left.
+ */
+function blankTerm(haystack: string, needle: string): string {
+  const re = termPattern(needle);
+  if (!re) return haystack;
+  return haystack.replace(re, (m, pre: string, post: string) =>
+    pre + " ".repeat(Math.max(0, m.length - pre.length - post.length)) + post,
+  );
 }
 
 export type ExtractedRequirement = {
@@ -120,11 +157,25 @@ export type ExtractedRequirement = {
 export function extractRequirement(text: string): ExtractedRequirement {
   const h = norm(text);
 
-  const technologies: string[] = TECHNOLOGIES.filter((t) => mentions(h, t));
-  const programmingLanguages: string[] = PROGRAMMING_LANGUAGES.filter((l) => mentions(h, l));
+  const technologies: string[] = [];
+  const programmingLanguages: string[] = [];
 
-  for (const [alias, canonical] of Object.entries(ALIASES)) {
-    if (!mentions(h, alias)) continue;
+  // One longest-first pass over the vocabulary and the aliases together, each
+  // match consuming the span it matched. Without the consumption step "SQL
+  // Server" also reported a bare "SQL" — the word boundary falls on the space —
+  // so every candidate who actually had SQL Server was listed as *missing* SQL
+  // and scored down for it. Longest-first also means an alias can never shadow
+  // a more specific real term.
+  const vocabulary: { needle: string; canonical: string }[] = [
+    ...TECHNOLOGIES.map((t) => ({ needle: t, canonical: t })),
+    ...PROGRAMMING_LANGUAGES.map((l) => ({ needle: l, canonical: l })),
+    ...Object.entries(ALIASES).map(([needle, canonical]) => ({ needle, canonical })),
+  ].sort((a, b) => norm(b.needle).length - norm(a.needle).length);
+
+  let unconsumed = h;
+  for (const { needle, canonical } of vocabulary) {
+    if (!mentions(unconsumed, needle)) continue;
+    unconsumed = blankTerm(unconsumed, needle);
     if ((TECHNOLOGIES as readonly string[]).includes(canonical)) {
       if (!technologies.includes(canonical)) technologies.push(canonical);
     } else if (!programmingLanguages.includes(canonical)) {
@@ -239,7 +290,15 @@ function buildReason(
   const parts: string[] = [];
   const hits = [...matchedLangs, ...matchedTech];
   if (hits.length) parts.push(hits.join(", "));
-  if (c.experience_years) parts.push(c.experience_years + " ניסיון");
+  if (c.experience_years) {
+    // The bucket labels are not uniform: "3-5 שנים" needs the word appended,
+    // "ללא ניסיון" already carries it and became "ללא ניסיון ניסיון".
+    parts.push(
+      c.experience_years.includes("ניסיון")
+        ? c.experience_years
+        : `${c.experience_years} ניסיון`,
+    );
+  }
   if (req.seniority && c.seniority === req.seniority) parts.push(c.seniority);
   if (req.region && (c.preferred_region === req.region || c.city === req.region)) {
     parts.push("אזור " + req.region);
