@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth-guard";
 import { adminConfigured, createAdminClient } from "@/lib/supabase/admin";
 import { MAX_PARSE_BYTES, parseCv, parserConfigured } from "@/lib/cv-parser";
+import { classifyFromPath } from "@/lib/folder-classification";
 import { normalizeEmail } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -66,6 +67,14 @@ export async function POST(request: Request) {
       merged = Boolean(candidateId);
     }
 
+    // Chana's folder names are a classification she curated by hand —
+    // `מעל 5 שנים/ג'אווה/...` says both the field and the experience band. It is
+    // frequently better than the CV: a CV seldom states "5+ years" outright, but
+    // she filed it there because she knows. Union it with what the scan found;
+    // for experience the folder wins, since that is her own judgement.
+    const fromFolder = classifyFromPath(relativePath);
+    const union = (a: string[] | undefined, b: string[]) => [...new Set([...(a ?? []), ...b])];
+
     const fields = {
       first_name: parsed?.first_name ?? null,
       last_name: parsed?.last_name ?? null,
@@ -73,15 +82,18 @@ export async function POST(request: Request) {
       phone,
       city: parsed?.city ?? null,
       preferred_region: parsed?.preferred_region ?? null,
-      programming_languages: parsed?.programming_languages ?? [],
-      technologies: parsed?.technologies ?? [],
+      programming_languages: union(parsed?.programming_languages, fromFolder.programmingLanguages),
+      technologies: union(parsed?.technologies, fromFolder.technologies),
       spoken_languages: parsed?.spoken_languages ?? [],
       role_types: parsed?.role_types ?? [],
-      experience_years: parsed?.experience_years ?? null,
+      experience_years: fromFolder.experienceYears ?? parsed?.experience_years ?? null,
       seniority: parsed?.seniority ?? null,
       institution: parsed?.institution ?? null,
       cohort_year: parsed?.cohort_year ?? null,
       notes_internal: parsed?.summary ?? null,
+      // Keep the folder names verbatim too, so a heading we could not map to the
+      // vocabulary is still searchable rather than silently dropped.
+      tags: fromFolder.tags,
     };
 
     if (candidateId) {
