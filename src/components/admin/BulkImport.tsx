@@ -20,13 +20,50 @@ export function BulkImport() {
   const [running, setRunning] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
   const [csvResult, setCsvResult] = useState<string | null>(null);
+  // A loud reason the import cannot start, as opposed to the quiet summary.
+  const [problem, setProblem] = useState<string | null>(null);
 
   function pick(input: HTMLInputElement) {
     const list = input.files;
-    if (!list?.length) return;
+
+    // The folder picker came back with nothing at all — the browser either does
+    // not support picking a directory, or she cancelled. Either way, saying
+    // nothing leaves her clicking a dead button.
+    if (!list?.length) {
+      setFiles([]);
+      chosenRef.current = [];
+      setProblem("לא נבחרו קבצים. אם בחרת תיקייה ולא קרה כלום, נסי בדפדפן Chrome.");
+      setSummary(null);
+      return;
+    }
+
     const chosen = Array.from(list).filter((f) => CV_EXT.test(f.name) && f.size > 0);
     chosenRef.current = chosen;
     setFiles(chosen.map((f) => ({ name: f.name, status: "queued" })));
+
+    if (!chosen.length) {
+      // Everything was filtered out. This used to be one grey line under a
+      // disabled button — a folder of 500 CVs read as "nothing happened".
+      // Name the formats actually found so the cause is obvious.
+      const exts = [
+        ...new Set(
+          Array.from(list).map((f) => {
+            const m = f.name.match(/\.([^.]+)$/);
+            return m ? "." + m[1].toLowerCase() : "(ללא סיומת)";
+          }),
+        ),
+      ].slice(0, 8);
+      setProblem(
+        `נבחרו ${list.length} קבצים, אבל אף אחד מהם אינו קובץ קורות חיים שאנחנו יודעים לקרוא. ` +
+          `הסוגים שנמצאו: ${exts.join(", ")}. ` +
+          `נתמכים: PDF, Word (doc/docx), טקסט, וצילומים (jpg/png).`,
+      );
+      setSummary(null);
+      input.value = "";
+      return;
+    }
+
+    setProblem(null);
     setSummary(
       `נבחרו ${list.length} קבצים, מתוכם ${chosen.length} נראים כמו קורות חיים. ` +
         `${list.length - chosen.length} קבצים אחרים ידולגו.`,
@@ -170,10 +207,22 @@ export function BulkImport() {
             בחירת תיקייה
           </label>
           <Button withArrow={false} onClick={run} disabled={running || !files.length}>
-            {running ? `מעלה… ${progress}%` : "התחלת ייבוא"}
+            {running
+              ? `מעלה… ${progress}%`
+              : files.length
+                ? `התחלת ייבוא (${files.length})`
+                : "התחלת ייבוא"}
           </Button>
         </div>
 
+        {problem && (
+          <p
+            role="alert"
+            className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-[14px] font-medium leading-relaxed text-amber-900 ring-1 ring-amber-200"
+          >
+            {problem}
+          </p>
+        )}
         {summary && <p className="mt-4 text-[14px] text-ink/70">{summary}</p>}
 
         {files.length > 0 && (
