@@ -55,17 +55,25 @@ export function Header({
     >
       {/* The chrome is laid out left-to-right (logo left, nav centre, CTA right)
           to match the mockups, even though page content itself is RTL. */}
-      <div dir="ltr" className="mx-auto flex h-20 max-w-[1400px] items-center gap-4 px-5 lg:px-10">
+      <div
+        dir="ltr"
+        className="relative mx-auto flex h-20 max-w-[1400px] items-center gap-4 px-5 lg:px-10"
+      >
         <Logo />
 
         {/* One cluster: nav links + account menu, uniform gap throughout, so
             the eye reads a single balanced menu. Items run right-to-left
-            (בית on the right, the account menu last). mx-auto centres the
-            cluster in the free space between logo and CTAs, which also keeps
-            it left of the hero video that the CTAs float over. */}
+            (בית on the right, the account menu last).
+
+            Centred against the header itself, not against the gap between the
+            logo and the CTAs. Those two sides are not the same width, so
+            `mx-auto` centred the menu in the leftover space and it read as
+            visibly off-centre. Absolute centring is exact whatever the logo or
+            the buttons happen to measure — and it only applies from lg up,
+            where there is room for it not to collide with either side. */}
         <nav
           dir="rtl"
-          className="mx-auto hidden items-center gap-7 lg:flex"
+          className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-7 lg:flex"
           aria-label="ניווט ראשי"
         >
           {NAV.map((item) => {
@@ -134,7 +142,7 @@ export function Header({
           )}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2 lg:ml-0">
+        <div className="ml-auto flex items-center gap-2">
           <ButtonLink href="/employers" variant="primary" size="sm" className="hidden md:inline-flex">
             מעסיקים? כנסו
           </ButtonLink>

@@ -157,6 +157,7 @@ export function BulkImport() {
   }, {});
   // Every terminal state counts toward progress — leaving "unparsed" out left
   // the bar stuck short of 100% on any folder that had an unreadable file.
+  const summaryDone = files.some((f) => f.status !== "queued");
   const progress = files.length
     ? Math.round(
         (((counts.done ?? 0) + (counts.merged ?? 0) + (counts.unparsed ?? 0) + (counts.failed ?? 0)) /
@@ -214,6 +215,19 @@ export function BulkImport() {
                 : "התחלת ייבוא"}
           </Button>
         </div>
+
+        {/* Files are chosen but nothing has been sent yet. This is the exact
+            state Chana sat in: a full list on screen, and no idea a click was
+            still required. Say it plainly, right above the list. */}
+        {!running && files.length > 0 && !summaryDone && (
+          <p
+            role="status"
+            className="mt-4 rounded-2xl bg-primary-50 px-4 py-3 text-[14px] font-semibold leading-relaxed text-navy ring-1 ring-primary/20"
+          >
+            {files.length} קבצים מוכנים — עדיין לא הועלה כלום. לחצי על{" "}
+            <span className="whitespace-nowrap">״התחלת ייבוא״</span> כדי להתחיל.
+          </p>
+        )}
 
         {problem && (
           <p
@@ -287,7 +301,9 @@ export function BulkImport() {
 
 function StatusPill({ status, error }: { status: FileState["status"]; error?: string }) {
   const map: Record<FileState["status"], { label: string; cls: string }> = {
-    queued: { label: "ממתין", cls: "bg-canvas text-ink/60" },
+    // "ממתין" was read as "the system is processing" — Chana picked 500 files,
+    // saw it beside every one, and waited for an import that had never started.
+    queued: { label: "מוכן", cls: "bg-canvas text-ink/60" },
     uploading: { label: "מעלה…", cls: "bg-primary-100 text-primary-700" },
     done: { label: "נקלט", cls: "bg-mint-100 text-navy" },
     merged: { label: "מוזג", cls: "bg-amber-100 text-amber-800" },
