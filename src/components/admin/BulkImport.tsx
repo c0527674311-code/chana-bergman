@@ -12,27 +12,32 @@ type FileState = {
 const CV_EXT = /\.(pdf|docx?|rtf|txt|odt|pages|png|jpe?g|heic|webp)$/i;
 
 export function BulkImport() {
-  const folderRef = useRef<HTMLInputElement>(null);
   const csvRef = useRef<HTMLInputElement>(null);
+  // The chosen File objects live in a ref (not state): both pickers feed the
+  // same queue, and re-rendering the list needs only the names/statuses.
+  const chosenRef = useRef<File[]>([]);
   const [files, setFiles] = useState<FileState[]>([]);
   const [running, setRunning] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
   const [csvResult, setCsvResult] = useState<string | null>(null);
 
-  function pick(list: FileList | null) {
-    if (!list) return;
+  function pick(input: HTMLInputElement) {
+    const list = input.files;
+    if (!list?.length) return;
     const chosen = Array.from(list).filter((f) => CV_EXT.test(f.name) && f.size > 0);
+    chosenRef.current = chosen;
     setFiles(chosen.map((f) => ({ name: f.name, status: "queued" })));
     setSummary(
       `נבחרו ${list.length} קבצים, מתוכם ${chosen.length} נראים כמו קורות חיים. ` +
         `${list.length - chosen.length} קבצים אחרים ידולגו.`,
     );
+    // Allow picking the same folder/files again after a run.
+    input.value = "";
   }
 
   async function run() {
-    const list = folderRef.current?.files;
-    if (!list?.length) return;
-    const chosen = Array.from(list).filter((f) => CV_EXT.test(f.name) && f.size > 0);
+    const chosen = chosenRef.current;
+    if (!chosen.length) return;
 
     setRunning(true);
     let done = 0;
@@ -121,13 +126,21 @@ export function BulkImport() {
     <div className="grid gap-6 lg:grid-cols-2">
       {/* ------------------------------------------------------------------ */}
       <section className="rounded-[var(--radius-card)] bg-white p-7 shadow-[0_10px_40px_-30px_rgb(28_28_60_/_0.4)]">
-        <h2 className="text-[20px] font-bold text-navy">תיקיית קורות חיים מהמחשב</h2>
+        <h2 className="text-[20px] font-bold text-navy">קורות חיים מהמחשב</h2>
         <p className="mt-2 text-[15px] leading-relaxed text-ink/70">
-          PDF, Word, טקסט או סריקות. כל קובץ נשמר במקור ולא נמחק לעולם.
+          קבצים בודדים או תיקייה שלמה. PDF, Word, טקסט או סריקות. כל קובץ נשמר במקור ולא
+          נמחק לעולם.
         </p>
 
         <input
-          ref={folderRef}
+          type="file"
+          multiple
+          accept=".pdf,.doc,.docx,.rtf,.txt,.odt,.pages,.png,.jpg,.jpeg,.heic,.webp"
+          className="sr-only"
+          id="cv-files"
+          onChange={(e) => pick(e.currentTarget)}
+        />
+        <input
           type="file"
           multiple
           // @ts-expect-error — non-standard but supported in Chrome/Edge/Safari
@@ -135,9 +148,15 @@ export function BulkImport() {
           directory=""
           className="sr-only"
           id="folder"
-          onChange={(e) => pick(e.target.files)}
+          onChange={(e) => pick(e.currentTarget)}
         />
         <div className="mt-5 flex flex-wrap gap-3">
+          <label
+            htmlFor="cv-files"
+            className="focus-brand cursor-pointer rounded-full border border-ink/20 px-5 py-2.5 text-[15px] font-semibold hover:bg-canvas"
+          >
+            בחירת קבצים
+          </label>
           <label
             htmlFor="folder"
             className="focus-brand cursor-pointer rounded-full border border-ink/20 px-5 py-2.5 text-[15px] font-semibold hover:bg-canvas"
