@@ -4,28 +4,10 @@ import { notFound } from "next/navigation";
 import { PageShell } from "@/components/site/PageShell";
 import { Section } from "@/components/site/Section";
 import { ButtonLink } from "@/components/ui/Button";
-import { createClient, getCurrentUser, supabaseConfigured } from "@/lib/supabase/server";
-import { findSeedJob } from "@/lib/content/jobs";
-import type { JobPosting } from "@/lib/types";
+import { getCurrentUser } from "@/lib/supabase/server";
+import { jobPath, loadPublicJob } from "@/lib/content/jobs";
 
 export const revalidate = 300;
-
-async function loadJob(slug: string): Promise<JobPosting | null> {
-  if (supabaseConfigured) {
-    const supabase = await createClient();
-    const { data } = await supabase
-      .from("requirements")
-      .select(
-        "id, title, public_slug, public_description, required_technologies, seniority, region, job_scope, created_at",
-      )
-      .eq("is_public", true)
-      .eq("status", "open")
-      .or(`public_slug.eq.${slug},id.eq.${slug}`)
-      .maybeSingle<JobPosting>();
-    if (data) return data;
-  }
-  return findSeedJob(slug) ?? null;
-}
 
 export async function generateMetadata({
   params,
@@ -33,14 +15,19 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const job = await loadJob(slug);
+  const job = await loadPublicJob(slug);
   if (!job) return { title: "המשרה לא נמצאה" };
-  return { title: job.title, description: job.public_description ?? undefined };
+  const description = job.public_description?.replace(/\s+/g, " ").trim().slice(0, 200);
+  return {
+    title: job.title,
+    description: description || undefined,
+    alternates: { canonical: jobPath(job) },
+  };
 }
 
 export default async function JobPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [user, job] = await Promise.all([getCurrentUser(), loadJob(slug)]);
+  const [user, job] = await Promise.all([getCurrentUser(), loadPublicJob(slug)]);
   if (!job) notFound();
 
   return (
