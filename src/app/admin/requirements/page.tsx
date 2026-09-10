@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { LoadError } from "@/components/admin/LoadError";
 import { ButtonLink } from "@/components/ui/Button";
 import { createClient, supabaseConfigured } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
@@ -26,13 +27,18 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default async function RequirementsPage() {
   let rows: RequirementRow[] = [];
+  let failed = false;
   if (supabaseConfigured) {
     const supabase = await createClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("requirements")
       .select("id, title, status, is_public, seniority, region, required_technologies, created_at")
       .order("created_at", { ascending: false })
       .returns<RequirementRow[]>();
+    if (error) {
+      console.error("requirements list failed:", error);
+      failed = true;
+    }
     rows = data ?? [];
   }
 
@@ -50,7 +56,9 @@ export default async function RequirementsPage() {
         </ButtonLink>
       </header>
 
-      {rows.length === 0 ? (
+      {failed ? (
+        <LoadError />
+      ) : rows.length === 0 ? (
         <div className="rounded-[var(--radius-card)] bg-white p-14 text-center">
           <p className="text-[17px] font-semibold text-navy">אין עדיין דרישות</p>
           <p className="mx-auto mt-2 max-w-md text-[15px] text-ink/65">
