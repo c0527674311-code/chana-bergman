@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   title: "טיפים לקריירה בהייטק",
   description:
     "איך לכתוב קורות חיים בעידן ה-AI, איך למצוא משרה ראשונה אחרי פרקטיקום, ומה באמת משתנה במעבר לראשות צוות.",
+  alternates: { canonical: "/blog" },
 };
 
 export const revalidate = 3600;

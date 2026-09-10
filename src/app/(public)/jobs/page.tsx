@@ -3,37 +3,19 @@ import Link from "next/link";
 import { PageShell } from "@/components/site/PageShell";
 import { Section } from "@/components/site/Section";
 import { ButtonLink } from "@/components/ui/Button";
-import { createClient, getCurrentUser, supabaseConfigured } from "@/lib/supabase/server";
-import { SEED_JOBS } from "@/lib/content/jobs";
-import type { JobPosting } from "@/lib/types";
+import { getCurrentUser } from "@/lib/supabase/server";
+import { jobPath, loadPublicJobs } from "@/lib/content/jobs";
 
 export const metadata: Metadata = {
   title: "משרות פתוחות",
   description: "משרות הייטק פתוחות למתכנתות — פיתוח, QA, DevOps, Data וראשות צוות.",
+  alternates: { canonical: "/jobs" },
 };
 
 export const revalidate = 300;
 
-async function loadJobs(): Promise<JobPosting[]> {
-  if (supabaseConfigured) {
-    const supabase = await createClient();
-    const { data } = await supabase
-      .from("requirements")
-      .select(
-        "id, title, public_slug, public_description, required_technologies, seniority, region, job_scope, created_at",
-      )
-      .eq("is_public", true)
-      .eq("status", "open")
-      .order("created_at", { ascending: false })
-      .returns<JobPosting[]>();
-    if (data?.length) return data;
-  }
-  // Sample postings until real public requirements exist.
-  return SEED_JOBS;
-}
-
 export default async function JobsPage() {
-  const [user, jobs] = await Promise.all([getCurrentUser(), loadJobs()]);
+  const [user, jobs] = await Promise.all([getCurrentUser(), loadPublicJobs()]);
 
   return (
     <PageShell
@@ -45,13 +27,13 @@ export default async function JobsPage() {
       <Section>
         {jobs.length === 0 ? (
           <div className="mx-auto max-w-2xl rounded-[var(--radius-card)] bg-canvas p-12 text-center">
-            <p className="text-[19px] font-bold text-navy">אין כרגע משרות מפורסמות</p>
+            <p className="text-[19px] font-bold text-navy">כרגע אין משרות פתוחות באתר</p>
             <p className="mx-auto mt-3 max-w-md text-[16px] leading-relaxed text-ink/75">
-              רוב הדרישות שלנו לא מתפרסמות — הן נשלחות ישירות למועמדות מתאימות מהמאגר. השאירי
-              קורות חיים כדי להיות ברשימה.
+              הצטרפי למאגר ונעדכן אותך כשתגיע משרה שמתאימה לך. רוב הדרישות שלנו לא מתפרסמות
+              בכלל — הן נשלחות ישירות למועמדות מהמאגר.
             </p>
             <ButtonLink href="/submit-cv" className="mt-7" size="lg">
-              שליחת קורות חיים
+              הצטרפות למאגר
             </ButtonLink>
           </div>
         ) : (
@@ -59,7 +41,7 @@ export default async function JobsPage() {
             {jobs.map((job) => (
               <li key={job.id}>
                 <Link
-                  href={`/jobs/${job.public_slug ?? job.id}`}
+                  href={jobPath(job)}
                   className="focus-brand group flex flex-col gap-3 rounded-[var(--radius-card)] bg-white p-7 shadow-[0_10px_40px_-28px_rgb(28_28_60_/_0.4)] transition-shadow hover:shadow-[var(--shadow-card)]"
                 >
                   <h2 className="text-[21px] font-bold text-navy group-hover:text-primary">

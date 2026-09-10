@@ -9,6 +9,7 @@ import { Markdown } from "@/components/site/Markdown";
 import { SEED_POSTS, findSeedPost } from "@/lib/content/posts";
 import { createClient, getCurrentUser, supabaseConfigured } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
+import { SITE_NAME } from "@/lib/seo";
 import type { Post } from "@/lib/types";
 
 export const revalidate = 3600;
@@ -42,7 +43,15 @@ export async function generateMetadata({
   return {
     title: post.title,
     description: post.excerpt ?? undefined,
-    openGraph: { title: post.title, description: post.excerpt ?? undefined, type: "article" },
+    alternates: { canonical: `/blog/${post.slug}` },
+    openGraph: {
+      type: "article",
+      locale: "he_IL",
+      siteName: SITE_NAME,
+      title: post.title,
+      description: post.excerpt ?? undefined,
+      publishedTime: post.published_at ?? undefined,
+    },
   };
 }
 

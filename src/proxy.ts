@@ -52,7 +52,9 @@ export default async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Everything except static assets and image files.
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // Everything except build output and static files — images, fonts, video,
+    // robots.txt / sitemap.xml, the web manifest, PDFs. None of them need a
+    // session, and each would otherwise cost a Supabase auth round-trip.
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff|woff2|ttf|otf|mp4|webm|txt|xml|webmanifest|pdf)$).*)",
   ],
 };

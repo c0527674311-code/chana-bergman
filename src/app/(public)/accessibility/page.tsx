@@ -5,7 +5,11 @@ import { Markdown } from "@/components/site/Markdown";
 import { CONTACT_DETAILS } from "@/lib/content/site";
 import { getCurrentUser } from "@/lib/supabase/server";
 
-export const metadata: Metadata = { title: "הצהרת נגישות", robots: { index: true, follow: false } };
+export const metadata: Metadata = {
+  title: "הצהרת נגישות",
+  robots: { index: true, follow: false },
+  alternates: { canonical: "/accessibility" },
+};
 
 const STATEMENT = `אנחנו רואות בנגישות האתר חלק מהשירות, ולא תוספת. האתר נבנה בהתאם לתקן הישראלי ת"י 5568 ברמה AA, המבוסס על הנחיות WCAG 2.1.
 
