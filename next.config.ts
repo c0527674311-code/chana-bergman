@@ -20,8 +20,13 @@ const nextConfig: NextConfig = {
       { source: "/cv/:id", destination: "/submit-cv", permanent: true },
       { source: "/candidate", destination: "/submit-cv", permanent: true },
       { source: "/candidate-referrals", destination: "/", permanent: true },
-      { source: "/signup", destination: "/register", permanent: true },
+      // Sign-up and sign-in are the same Google button on /login — there is
+      // no /register page (the old target 404'd).
+      { source: "/signup", destination: "/login", permanent: true },
+      { source: "/register", destination: "/login", permanent: true },
       { source: "/reset-password", destination: "/login", permanent: true },
+      // /auth itself has no page, only /auth/callback and /auth/signout.
+      { source: "/auth", destination: "/login", permanent: true },
       { source: "/contact-section", destination: "/#contact", permanent: true },
       { source: "/steps-section", destination: "/#how-it-works", permanent: true },
       // Old back-office routes → the new admin.
