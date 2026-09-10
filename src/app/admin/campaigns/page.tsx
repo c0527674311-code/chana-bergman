@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ButtonLink } from "@/components/ui/Button";
 import { createClient, supabaseConfigured } from "@/lib/supabase/server";
 import { candidateStats } from "@/lib/queries";
+import { mailProvider } from "@/lib/mailer";
 import { formatDate } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "דיוור קבוצתי" };
@@ -18,7 +19,7 @@ type CampaignRow = {
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "טיוטה",
-  sending: "נשלח…",
+  sending: "בשליחה…",
   sent: "נשלח",
   failed: "נכשל",
 };
@@ -38,7 +39,9 @@ export default async function CampaignsPage() {
     rows = data ?? [];
   }
 
-  const provider = process.env.EMAIL_PROVIDER ?? "none";
+  // The same check the send route makes — "smoove" or a missing key is shown
+  // as not connected, not as a working provider.
+  const provider = mailProvider();
 
   return (
     <>
@@ -49,11 +52,11 @@ export default async function CampaignsPage() {
               directly above a warning saying nothing can be sent at all. Say
               what is true right now instead. */}
           <p className="mt-2 max-w-2xl text-[16px] text-ink/70">
-            {provider === "none" ? (
+            {!provider.ok ? (
               <>
-                בוחרים מועמדות במסך האיתור או במאגר, ולוחצים &quot;שליחת מייל&quot;. הבחירה
-                והנוסח נשמרים — אבל <strong className="text-navy">כרגע מיילים לא יוצאים</strong>,
-                כי עדיין לא חובר ספק דיוור.
+                בוחרים מועמדות במסך האיתור או במאגר, ולוחצים &quot;שליחת מייל&quot; — אבל{" "}
+                <strong className="text-navy">כרגע מיילים לא יוצאים</strong>, כי עדיין לא חובר ספק
+                דיוור.
               </>
             ) : (
               <>
@@ -73,15 +76,15 @@ export default async function CampaignsPage() {
         <Tile label="סה״כ במאגר" value={stats.total.toLocaleString("he-IL")} />
         <Tile
           label="ספק שליחה"
-          value={provider === "none" ? "לא מוגדר" : provider}
-          warn={provider === "none"}
+          value={provider.ok ? "Resend" : "לא מוגדר"}
+          warn={!provider.ok}
         />
       </div>
 
-      {provider === "none" && (
+      {!provider.ok && (
         <p className="mb-6 rounded-2xl bg-amber-50 px-5 py-3 text-[14px] font-medium text-amber-900 ring-1 ring-amber-200">
-          לא הוגדר ספק דיוור. עד שיוגדר <code>EMAIL_PROVIDER</code> בקובץ הסביבה, מיילים לא יישלחו
-          בפועל — הבחירה תישמר אבל לא תצא החוצה.
+          {provider.error} עד שיוגדרו <code>EMAIL_PROVIDER=resend</code> ו-<code>RESEND_API_KEY</code>{" "}
+          בקובץ הסביבה, ניסיון שליחה ייעצר עם הודעה — שום מייל לא יישלח.
         </p>
       )}
 
