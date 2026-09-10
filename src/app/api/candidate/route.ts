@@ -43,6 +43,15 @@ export async function POST(request: Request) {
   if (cvFile && cvFile.size > MAX_CV_BYTES) {
     return NextResponse.json({ error: "הקובץ גדול מדי (עד 15MB)." }, { status: 400 });
   }
+  // Joining the pool means agreeing to hear about jobs — that is the service.
+  // The checkbox is `required` in the form, but a request can skip the form.
+  if (mode === "submit" && form.get("consent_marketing") == null) {
+    return NextResponse.json(
+      { error: "כדי להצטרף למאגר יש לאשר קבלת עדכונים על משרות במייל." },
+      { status: 400 },
+    );
+  }
+
   // A voice recording is a full substitute for an uploaded file.
   const voiceTranscript = String(form.get("voice_transcript") ?? "").trim().slice(0, 20_000);
   if (mode === "submit" && !cvFile && !voiceTranscript) {
@@ -65,12 +74,12 @@ export async function POST(request: Request) {
     experience_years: String(form.get("experience_years") ?? "").trim() || null,
     notes_from_candidate: String(form.get("notes_from_candidate") ?? "").trim() || null,
     contact_before_sending: form.get("contact_before_sending") === "yes",
-    consent_marketing: form.get("consent_marketing") != null,
   };
 
   if (!adminConfigured()) {
     const saved = await saveDevSubmission("candidate", {
       ...fields,
+      consent_marketing: mode === "submit",
       cv: cvFile?.name ?? null,
       voice: voiceTranscript ? voiceTranscript.slice(0, 200) : null,
       mode,
@@ -110,19 +119,31 @@ export async function POST(request: Request) {
       candidateId = (matchId as string | null) ?? null;
     }
 
+    const now = new Date().toISOString();
+
     if (candidateId) {
+      // The profile-edit form has no consent checkbox, yet this used to write
+      // consent_marketing = form.get(...) != null — i.e. false — so a candidate
+      // who fixed a typo in her profile silently dropped off every mailing.
+      // Consent now changes only on a submission (which requires it) or via
+      // the unsubscribe link, never as a side effect of editing.
       const { error } = await admin
         .from("candidates")
-        .update({ ...fields, consent_at: fields.consent_marketing ? new Date().toISOString() : null })
+        .update(mode === "submit" ? { ...fields, consent_marketing: true } : fields)
         .eq("id", candidateId);
       if (error) throw error;
+      if (mode === "submit") {
+        // Keep the date she first agreed; only fill it when it was never set.
+        await admin.from("candidates").update({ consent_at: now }).eq("id", candidateId).is("consent_at", null);
+      }
     } else {
       const { data, error } = await admin
         .from("candidates")
         .insert({
           ...fields,
           source: "site",
-          consent_at: fields.consent_marketing ? new Date().toISOString() : null,
+          consent_marketing: mode === "submit",
+          consent_at: mode === "submit" ? now : null,
         })
         .select("id")
         .single();

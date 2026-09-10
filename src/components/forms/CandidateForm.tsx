@@ -282,13 +282,17 @@ export function CandidateForm({
       {mode === "edit" && uploadBlock}
 
       {mode === "submit" && (
+        // Joining the pool means agreeing to hear about jobs — that is the whole
+        // service. Required, and left unticked so the agreement is her own act
+        // rather than a box she never noticed; the server enforces it too.
         <Checkbox
           name="consent_marketing"
-          defaultChecked
+          required
           label={
             <>
-              אני מאשרת קבלת עדכונים על משרות רלוונטיות במייל. אפשר להסיר את עצמך בכל רגע
-              מקישור בתחתית כל מייל.
+              אני מאשרת קבלת עדכונים על משרות רלוונטיות במייל{" "}
+              <span className="font-semibold text-navy">(חובה להצטרפות למאגר)</span>. אפשר
+              להסיר את עצמך בכל רגע מקישור בתחתית כל מייל.
             </>
           }
         />
