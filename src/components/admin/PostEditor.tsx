@@ -19,12 +19,21 @@ type Draft = {
 
 const BLANK: Draft = { title: "", slug: "", excerpt: "", body_md: "", published: true };
 
+/** Admin rows come from `select("*")`, so they carry the `published` flag. */
+type AdminPost = Post & { published?: boolean };
+
+// published_at is kept once a post was ever live (the original date survives
+// unpublishing), so the flag — not the date — says whether it is live now.
+function isLive(p: AdminPost) {
+  return p.published ?? Boolean(p.published_at);
+}
+
 /**
  * Blog manager for the back-office: list existing posts, write a new one, or
  * edit and delete an existing one. Live Markdown preview uses the very same
  * renderer as the public article page, so what Chana sees is what ships.
  */
-export function PostEditor({ posts, canSave }: { posts: Post[]; canSave: boolean }) {
+export function PostEditor({ posts, canSave }: { posts: AdminPost[]; canSave: boolean }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
@@ -222,10 +231,10 @@ export function PostEditor({ posts, canSave }: { posts: Post[]; canSave: boolean
                   <span
                     className={cn(
                       "me-2 rounded-full px-2 py-0.5 text-[12px] font-semibold",
-                      p.published_at ? "bg-mint-100 text-navy" : "bg-canvas text-ink/60",
+                      isLive(p) ? "bg-mint-100 text-navy" : "bg-canvas text-ink/60",
                     )}
                   >
-                    {p.published_at ? "מפורסם" : "טיוטה"}
+                    {isLive(p) ? "מפורסם" : "טיוטה"}
                   </span>
                   {formatDate(p.published_at)} · /{p.slug}
                 </p>
@@ -240,7 +249,7 @@ export function PostEditor({ posts, canSave }: { posts: Post[]; canSave: boolean
                       slug: p.slug,
                       excerpt: p.excerpt ?? "",
                       body_md: p.body_md,
-                      published: Boolean(p.published_at),
+                      published: isLive(p),
                     })
                   }
                   className="focus-brand rounded-full border border-ink/15 px-4 py-2 text-[14px] font-semibold hover:bg-canvas"
