@@ -52,6 +52,7 @@ export default async function CandidatesPage({
             status: c.status,
             updatedAt: c.updated_at,
             mailable: Boolean(c.email && c.consent_marketing && !c.unsubscribed_at),
+            unsubscribed: Boolean(c.unsubscribed_at),
           }))}
         />
       </div>

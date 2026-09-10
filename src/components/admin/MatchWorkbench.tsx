@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { CampaignDialog } from "@/components/admin/CampaignDialog";
+import { ConsentButton, mailBlockReason } from "@/components/admin/ConsentButton";
 import { cn } from "@/lib/utils";
 
 type Row = {
@@ -18,6 +19,7 @@ type Row = {
   cohort: number | null;
   status: string;
   mailable: boolean;
+  unsubscribed: boolean;
   score: number;
   reason: string;
   matched: string[];
@@ -174,6 +176,14 @@ export function MatchWorkbench() {
               >
                 ייצוא רשימה
               </button>
+              <ConsentButton
+                candidates={selectedRows}
+                onMarked={(ids) =>
+                  setRows((prev) =>
+                    prev ? prev.map((r) => (ids.includes(r.id) ? { ...r, mailable: true } : r)) : prev,
+                  )
+                }
+              />
               <Button
                 size="sm"
                 withArrow={false}
@@ -218,9 +228,9 @@ export function MatchWorkbench() {
                             {r.cohort ? ` · ${r.cohort}` : ""}
                           </span>
                         )}
-                        {!r.mailable && (
+                        {mailBlockReason(r) && (
                           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[12px] font-semibold text-amber-800">
-                            ללא הסכמת דיוור
+                            {mailBlockReason(r)}
                           </span>
                         )}
                         {r.status === "placed" && (

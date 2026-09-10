@@ -37,6 +37,7 @@ export async function POST(request: Request) {
       cohort: r.candidate.cohort_year,
       status: r.candidate.status,
       mailable: Boolean(r.candidate.email && r.candidate.consent_marketing && !r.candidate.unsubscribed_at),
+      unsubscribed: Boolean(r.candidate.unsubscribed_at),
       score: r.score,
       reason: r.reason,
       matched: r.matchedTechnologies,

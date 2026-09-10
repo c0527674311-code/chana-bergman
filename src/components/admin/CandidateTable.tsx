@@ -1,8 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { CampaignDialog } from "@/components/admin/CampaignDialog";
+import { ConsentButton, mailBlockReason } from "@/components/admin/ConsentButton";
 import { formatDate } from "@/lib/utils";
 
 export type Row = {
@@ -20,6 +22,7 @@ export type Row = {
   status: string;
   updatedAt: string;
   mailable: boolean;
+  unsubscribed: boolean;
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -30,6 +33,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export function CandidateTable({ candidates }: { candidates: Row[] }) {
+  const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [campaignOpen, setCampaignOpen] = useState(false);
 
@@ -76,6 +80,7 @@ export function CandidateTable({ candidates }: { candidates: Row[] }) {
             >
               ניקוי
             </button>
+            <ConsentButton tone="dark" candidates={selectedRows} onMarked={() => router.refresh()} />
             <Button
               size="sm"
               variant="mint"
@@ -128,12 +133,25 @@ export function CandidateTable({ candidates }: { candidates: Row[] }) {
                 </td>
                 <td className="px-4 py-3">
                   <span className="block font-semibold text-navy">{c.name}</span>
-                  <span className="block text-[12.5px] text-ink/55" dir="ltr">
-                    {c.email ?? c.phone ?? "—"}
-                  </span>
-                  {!c.mailable && (
+                  {/* A personal email from her own mailbox is correspondence, not
+                      a campaign — so it is always one click away, consent or not. */}
+                  {c.email ? (
+                    <a
+                      href={`mailto:${c.email}`}
+                      dir="ltr"
+                      title="מייל אישי מהתיבה שלך"
+                      className="focus-brand block text-[12.5px] text-primary hover:underline"
+                    >
+                      {c.email}
+                    </a>
+                  ) : (
+                    <span className="block text-[12.5px] text-ink/55" dir="ltr">
+                      {c.phone ?? "—"}
+                    </span>
+                  )}
+                  {mailBlockReason(c) && (
                     <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
-                      ללא הסכמת דיוור
+                      {mailBlockReason(c)}
                     </span>
                   )}
                 </td>

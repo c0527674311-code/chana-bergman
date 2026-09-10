@@ -102,6 +102,14 @@ export function CandidateForm({
         true,
       );
       if (result === "done") {
+        // The model reads the rest of a recording well, but drops a Latin letter
+        // spoken in Hebrew ("סי" for c) and keeps recognizer hyphens between
+        // digits. The local extractor handles both deterministically, so for
+        // the address specifically it wins.
+        if (local.email) {
+          setPrefill((p) => ({ ...p, email: local.email }));
+          setPrefillVersion((v) => v + 1);
+        }
         setScan("done");
         return;
       }
@@ -232,6 +240,7 @@ export function CandidateForm({
       {scan === "done" && (
         <p role="status" className="mt-2 rounded-2xl bg-mint-100 px-4 py-2.5 text-[14px] font-semibold text-navy">
           הפרטים מולאו אוטומטית — עברי עליהם, תקני אם צריך, ואשרי למטה.
+          {voiceTranscript && " בהקלטה קשה לזהות אותיות באנגלית — בדקי במיוחד את כתובת המייל."}
         </p>
       )}
       {scan === "failed" && (

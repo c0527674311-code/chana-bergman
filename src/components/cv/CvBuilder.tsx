@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/Button";
 import { CvSheet } from "@/components/cv/CvSheet";
 import {
@@ -22,6 +23,13 @@ export function CvBuilder() {
   const [checkout, setCheckout] = useState<Checkout | null>(null);
   const [payDialog, setPayDialog] = useState<Checkout | null>(null);
   const [scale, setScale] = useState(0.5);
+  // Client-only flag without setState-in-effect: the print copy is portalled
+  // into <body>, which does not exist during server rendering.
+  const isClient = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
   const previewRef = useRef<HTMLDivElement>(null);
 
   // Load the pricing config up front so the button can show the price.
@@ -233,7 +241,7 @@ export function CvBuilder() {
           >
             <div style={{ transform: `scale(${scale})`, transformOrigin: "top center" }}>
               <div className="shadow-[var(--shadow-card)]">
-                <CvSheet data={preview} template={template} print />
+                <CvSheet data={preview} template={template} />
               </div>
             </div>
           </div>
@@ -275,6 +283,18 @@ export function CvBuilder() {
           }}
         />
       )}
+
+      {/* What actually gets printed. The on-screen preview lives inside a
+          scale() transform and a clipped, fixed-height box; printing that
+          element gave a blank first page and the CV shrunk across four pages.
+          This copy sits directly under <body>, untransformed, at true A4. */}
+      {isClient &&
+        createPortal(
+          <div id="cv-print-root" aria-hidden="true">
+            <CvSheet data={preview} template={template} print />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

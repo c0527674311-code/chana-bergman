@@ -65,6 +65,96 @@ function yearsToBucket(n: number): string {
   return "10+ שנים";
 }
 
+/**
+ * English letters as Hebrew speech recognition spells them.
+ *
+ * Only names that are not also common Hebrew words: "אל", "אם", "או" and "אף"
+ * would otherwise swallow the word spoken just before an address.
+ */
+const LETTER_NAMES: Record<string, string> = {
+  בי: "b",
+  סי: "c",
+  די: "d",
+  "ג'י": "g",
+  "ג׳י": "g",
+  "איץ'": "h",
+  "אייץ'": "h",
+  "איץ׳": "h",
+  "אייץ׳": "h",
+  "ג'יי": "j",
+  "ג׳יי": "j",
+  קיי: "k",
+  פי: "p",
+  קיו: "q",
+  טי: "t",
+  דאבליו: "w",
+  אקס: "x",
+  וואי: "y",
+  זי: "z",
+  זד: "z",
+};
+
+/** Domain words that recognition sometimes writes in Hebrew letters. */
+const DOMAIN_WORDS: Record<string, string> = {
+  "ג'ימייל": "gmail",
+  "ג׳ימייל": "gmail",
+  גימייל: "gmail",
+  הוטמייל: "hotmail",
+  אאוטלוק: "outlook",
+  יאהו: "yahoo",
+  וואלה: "walla",
+  קום: "com",
+  נט: "net",
+  אורג: "org",
+  קו: "co",
+  איל: "il",
+};
+
+/**
+ * Rebuilds an address from how people actually say one.
+ *
+ * "סי 052-7674311 שטרודל gmail נקודה com" used to come back as
+ * "052-7674311@gmail.com": the spoken letter was a separate, Hebrew-spelled
+ * word the old one-regex match could not reach, and the hyphens a recognizer
+ * places between digit groups were kept as if they were part of the address.
+ * Walk backwards from the "@" over every address-like token instead, map
+ * spelled-out letters, and drop hyphens that sit between two digits.
+ */
+function spokenEmail(t: string): string | null {
+  const s = t.replace(/\s*(?:שטרודל|כרוכית|@)\s*/g, " @ ").replace(/\s*נקודה\s*/g, ".");
+  const at = s.indexOf(" @ ");
+  if (at < 0) return null;
+
+  const tidy = (tok: string) => tok.replace(/^[,:;"()]+|[,:;"()]+$/g, "");
+
+  const local: string[] = [];
+  const before = s.slice(0, at).trim().split(" ");
+  for (let i = before.length - 1; i >= 0; i--) {
+    const tok = tidy(before[i]);
+    if (/^[A-Za-z0-9._%+-]+$/.test(tok)) local.unshift(tok);
+    else if (LETTER_NAMES[tok]) local.unshift(LETTER_NAMES[tok]);
+    else break;
+  }
+
+  const domain: string[] = [];
+  for (const raw of s.slice(at + 3).trim().split(" ")) {
+    const parts = tidy(raw)
+      .split(".")
+      .map((part) => (/^[A-Za-z0-9-]*$/.test(part) ? part : DOMAIN_WORDS[part]));
+    if (parts.some((part) => part === undefined)) break;
+    domain.push(parts.join("."));
+  }
+
+  const localPart = local
+    .join("")
+    .replace(/(\d)-(?=\d)/g, "$1")
+    .replace(/^\.+|\.+$/g, "");
+  const domainPart = domain.join("").replace(/\.{2,}/g, ".").replace(/^\.+|\.+$/g, "");
+  const email = `${localPart}@${domainPart}`.toLowerCase();
+
+  return /^[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(email) ? email : null;
+}
+
 export function extractFromTranscript(transcript: string): Partial<Candidate> {
   const t = ` ${transcript.replace(/\s+/g, " ").trim()} `;
   const out: Partial<Candidate> = {};
@@ -82,12 +172,9 @@ export function extractFromTranscript(transcript: string): Partial<Candidate> {
   const phoneMatch = t.match(/0\d(?:[-\s]?\d){7,8}/);
   if (phoneMatch) out.phone = phoneMatch[0].replace(/\s+/g, "-");
 
-  // --- Email: handle the spoken forms "שטרודל" and "נקודה" -----------------
-  const emailSource = t
-    .replace(/\s*(?:שטרודל|כרוכית)\s*/g, "@")
-    .replace(/\s*נקודה\s*/g, ".");
-  const emailMatch = emailSource.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z]{2,})+/);
-  if (emailMatch) out.email = emailMatch[0].toLowerCase();
+  // --- Email ----------------------------------------------------------------
+  const email = spokenEmail(t);
+  if (email) out.email = email;
 
   // --- City & region (Hebrew prefixes: "מירושלים", "בבני ברק") -------------
   for (const city of CITIES) {

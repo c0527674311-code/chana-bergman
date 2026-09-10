@@ -249,21 +249,29 @@ select.field-select {
    The browser's "save as PDF" is the download mechanism, so print
    shows ONLY the CV sheet, at full A4, no chrome.
    ============================================================ */
+#cv-print-root {
+  display: none;
+}
+
 @media print {
-  body * {
-    visibility: hidden;
+  /* display, not visibility: hidden-but-present elements still take up their
+     full height, which is what pushed the CV onto pages two to four. */
+  body > *:not(#cv-print-root) {
+    display: none !important;
   }
-  #cv-print-area,
-  #cv-print-area * {
-    visibility: visible;
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+  #cv-print-root {
+    display: block;
   }
   #cv-print-area {
-    position: absolute;
-    inset: 0;
     width: 210mm;
     min-height: 297mm;
     margin: 0;
-    transform: none !important;
     box-shadow: none !important;
     border-radius: 0 !important;
     /* Templates use colored bands/chips — keep them in the saved PDF. */
