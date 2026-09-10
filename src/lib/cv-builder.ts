@@ -74,26 +74,101 @@ export const CV_TEMPLATES = [
 
 export type CvTemplateId = (typeof CV_TEMPLATES)[number]["id"];
 
-/** Merges sample content into blanks so the preview always looks like a CV. */
-export function withSample(data: CvData): CvData {
-  const exp = data.experience.some((e) => e.role || e.company)
-    ? data.experience
-    : SAMPLE_CV.experience;
-  const edu = data.education.some((e) => e.degree || e.institution)
-    ? data.education
-    : SAMPLE_CV.education;
-  return {
-    fullName: data.fullName || SAMPLE_CV.fullName,
-    title: data.title || SAMPLE_CV.title,
-    email: data.email || SAMPLE_CV.email,
-    phone: data.phone || SAMPLE_CV.phone,
-    city: data.city || SAMPLE_CV.city,
-    summary: data.summary || SAMPLE_CV.summary,
-    skills: data.skills || SAMPLE_CV.skills,
-    languages: data.languages || SAMPLE_CV.languages,
-    experience: exp,
-    education: edu,
-  };
+export function isCvTemplateId(value: unknown): value is CvTemplateId {
+  return CV_TEMPLATES.some((t) => t.id === value);
+}
+
+const TEXT_FIELDS = [
+  "fullName",
+  "title",
+  "email",
+  "phone",
+  "city",
+  "summary",
+  "skills",
+  "languages",
+] as const;
+
+/** Which parts of a preview are example content rather than her own. */
+export type CvSampleFlags = Partial<Record<keyof CvData, boolean>>;
+
+/**
+ * Only what the candidate actually wrote: strings trimmed, blank experience
+ * and education rows dropped. This — never the sample-filled preview — is
+ * what goes into the downloaded PDF.
+ */
+export function cleanCv(data: CvData): CvData {
+  const out = { ...data };
+  for (const key of TEXT_FIELDS) out[key] = data[key].trim();
+  out.experience = data.experience
+    .map((e) => ({
+      role: e.role.trim(),
+      company: e.company.trim(),
+      from: e.from.trim(),
+      to: e.to.trim(),
+      description: e.description.trim(),
+    }))
+    .filter((e) => e.role || e.company || e.description);
+  out.education = data.education
+    .map((e) => ({ degree: e.degree.trim(), institution: e.institution.trim(), year: e.year.trim() }))
+    .filter((e) => e.degree || e.institution);
+  return out;
+}
+
+/**
+ * Fills blanks with sample content so the on-screen preview always looks like
+ * a CV, and reports which parts are samples so the sheet can grey them out.
+ */
+export function withSample(data: CvData): { data: CvData; sample: CvSampleFlags } {
+  const real = cleanCv(data);
+  const merged = { ...real };
+  const sample: CvSampleFlags = {};
+  for (const key of TEXT_FIELDS) {
+    if (!real[key]) {
+      merged[key] = SAMPLE_CV[key];
+      sample[key] = true;
+    }
+  }
+  if (real.experience.length === 0) {
+    merged.experience = SAMPLE_CV.experience;
+    sample.experience = true;
+  }
+  if (real.education.length === 0) {
+    merged.education = SAMPLE_CV.education;
+    sample.education = true;
+  }
+  return { data: merged, sample };
+}
+
+/**
+ * Rebuilds a CvData from untrusted JSON (a saved draft), keeping only
+ * well-formed string fields so an old or tampered draft can't crash the form.
+ */
+export function normalizeCv(raw: unknown): CvData {
+  const src = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const str = (o: Record<string, unknown>, k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+  const rows = (k: string) =>
+    Array.isArray(src[k])
+      ? (src[k] as unknown[]).filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === "object")
+      : [];
+
+  const out = { ...EMPTY_CV };
+  for (const key of TEXT_FIELDS) out[key] = str(src, key);
+  const experience = rows("experience").map((r) => ({
+    role: str(r, "role"),
+    company: str(r, "company"),
+    from: str(r, "from"),
+    to: str(r, "to"),
+    description: str(r, "description"),
+  }));
+  const education = rows("education").map((r) => ({
+    degree: str(r, "degree"),
+    institution: str(r, "institution"),
+    year: str(r, "year"),
+  }));
+  out.experience = experience.length ? experience : EMPTY_CV.experience;
+  out.education = education.length ? education : EMPTY_CV.education;
+  return out;
 }
 
 /** True once the candidate typed anything meaningful — gates the download. */

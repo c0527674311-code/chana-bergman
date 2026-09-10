@@ -280,6 +280,23 @@ select.field-select {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+  /* A long CV flows onto more pages. The page margin stays 0 so the colored
+     bands and the rose sidebar still bleed to the paper edge; instead each
+     padded box repeats its top/bottom padding at every page break, so text
+     never runs into the edge of page two. */
+  #cv-print-area .cv-pad,
+  #cv-print-area.cv-pad {
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+  /* A job or degree entry moves to the next page whole, and a section
+     heading never sits alone at the bottom of a page. */
+  #cv-print-area .cv-keep {
+    break-inside: avoid;
+  }
+  #cv-print-area .cv-head {
+    break-after: avoid;
+  }
   @page {
     size: A4;
     margin: 0;

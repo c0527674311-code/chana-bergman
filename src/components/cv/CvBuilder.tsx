@@ -8,7 +8,10 @@ import { CvSheet } from "@/components/cv/CvSheet";
 import {
   CV_TEMPLATES,
   EMPTY_CV,
+  cleanCv,
   hasRealContent,
+  isCvTemplateId,
+  normalizeCv,
   withSample,
   type CvData,
   type CvTemplateId,
@@ -17,12 +20,66 @@ import { cn } from "@/lib/utils";
 
 type Checkout = { mode: "free" } | { mode: "paid"; price: number; url: string };
 
+/* ------------------------------------------------------------------ */
+/* Draft persistence                                                   */
+/* ------------------------------------------------------------------ */
+
+// The draft lives in localStorage so a refresh — or the trip to the payment
+// page and back — never wipes what she typed. It is an external store read
+// through useSyncExternalStore: the server snapshot is always blank, so the
+// hydrated markup matches, and the saved draft appears right after.
+const DRAFT_KEY = "cv-builder-draft";
+
+type Draft = { data: CvData; template: CvTemplateId };
+
+const BLANK_DRAFT: Draft = { data: EMPTY_CV, template: "clean" };
+
+let draft: Draft | undefined;
+const draftListeners = new Set<() => void>();
+
+function readDraft(): Draft {
+  if (draft === undefined) {
+    draft = BLANK_DRAFT;
+    try {
+      const raw = window.localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as { data?: unknown; template?: unknown };
+        draft = {
+          data: normalizeCv(saved.data),
+          template: isCvTemplateId(saved.template) ? saved.template : "clean",
+        };
+      }
+    } catch {
+      // Storage blocked or a corrupt draft — start blank.
+    }
+  }
+  return draft;
+}
+
+function writeDraft(next: Draft) {
+  draft = next;
+  try {
+    if (next === BLANK_DRAFT) window.localStorage.removeItem(DRAFT_KEY);
+    else window.localStorage.setItem(DRAFT_KEY, JSON.stringify(next));
+  } catch {
+    // Storage blocked (private mode, quota): the form keeps working in memory.
+  }
+  draftListeners.forEach((listener) => listener());
+}
+
+function subscribeDraft(listener: () => void) {
+  draftListeners.add(listener);
+  return () => {
+    draftListeners.delete(listener);
+  };
+}
+
 export function CvBuilder() {
-  const [data, setData] = useState<CvData>(EMPTY_CV);
-  const [template, setTemplate] = useState<CvTemplateId>("clean");
+  const { data, template } = useSyncExternalStore(subscribeDraft, readDraft, () => BLANK_DRAFT);
   const [checkout, setCheckout] = useState<Checkout | null>(null);
   const [payDialog, setPayDialog] = useState<Checkout | null>(null);
   const [scale, setScale] = useState(0.5);
+  const [sheetHeight, setSheetHeight] = useState(297 * 3.7795);
   // Client-only flag without setState-in-effect: the print copy is portalled
   // into <body>, which does not exist during server rendering.
   const isClient = useSyncExternalStore(
@@ -31,6 +88,7 @@ export function CvBuilder() {
     () => false,
   );
   const previewRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   // Load the pricing config up front so the button can show the price.
   useEffect(() => {
@@ -50,6 +108,29 @@ export function CvBuilder() {
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
   }, []);
+
+  // A long CV runs past one A4 page — grow the preview box with the sheet
+  // instead of clipping page two.
+  useEffect(() => {
+    const el = sheetRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setSheetHeight(el.offsetHeight));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  function setData(update: (d: CvData) => CvData) {
+    const current = readDraft();
+    writeDraft({ ...current, data: update(current.data) });
+  }
+
+  function setTemplate(id: CvTemplateId) {
+    writeDraft({ ...readDraft(), template: id });
+  }
+
+  function startOver() {
+    if (window.confirm("לנקות את כל הפרטים ולהתחיל מחדש?")) writeDraft(BLANK_DRAFT);
+  }
 
   function set<K extends keyof CvData>(key: K, value: CvData[K]) {
     setData((d) => ({ ...d, [key]: value }));
@@ -84,9 +165,13 @@ export function CvBuilder() {
     else window.print();
   }
 
-  const preview = withSample(data);
+  // Screen and paper get different copies: the preview fills blanks with
+  // greyed-out examples, the PDF holds only what she actually wrote.
+  const { data: preview, sample } = withSample(data);
+  const printable = cleanCv(data);
   const ready = hasRealContent(data);
-  const isSample = !ready;
+  const hasSample = Object.values(sample).some(Boolean);
+  const touched = Object.values(sample).filter(Boolean).length < Object.keys(printable).length;
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,46%)_minmax(0,54%)]">
@@ -94,6 +179,19 @@ export function CvBuilder() {
       {/* Form                                                             */}
       {/* ---------------------------------------------------------------- */}
       <div className="flex min-w-0 flex-col gap-6">
+        <div className="-mb-2 flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <p className="text-[13px] text-ink/55">הפרטים נשמרים אוטומטית, רק בדפדפן הזה.</p>
+          {touched && (
+            <button
+              type="button"
+              onClick={startOver}
+              className="focus-brand rounded-full px-3 py-1 text-[13px] font-semibold text-ink/60 hover:bg-canvas"
+            >
+              ניקוי והתחלה מחדש
+            </button>
+          )}
+        </div>
+
         <Fieldset title="פרטים אישיים">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="שם מלא" value={data.fullName} onChange={(v) => set("fullName", v)} />
@@ -230,18 +328,18 @@ export function CvBuilder() {
         </div>
 
         <div ref={previewRef} className="overflow-hidden rounded-[22px] bg-ink/5 p-3">
-          {isSample && (
+          {hasSample && (
             <p className="pb-2 text-center text-[13px] font-medium text-ink/55">
-              תצוגה מקדימה עם תוכן לדוגמה — מתחלף בפרטים שלך תוך כדי הקלדה
+              החלקים החיוורים הם דוגמה בלבד — הם מתחלפים בפרטים שלך ולא ייכנסו לקובץ
             </p>
           )}
           <div
-            style={{ height: `${297 * 3.7795 * scale + 24}px` }}
+            style={{ height: `${sheetHeight * scale + 24}px` }}
             className="flex justify-center overflow-hidden"
           >
             <div style={{ transform: `scale(${scale})`, transformOrigin: "top center" }}>
-              <div className="shadow-[var(--shadow-card)]">
-                <CvSheet data={preview} template={template} />
+              <div ref={sheetRef} className="shadow-[var(--shadow-card)]">
+                <CvSheet data={preview} template={template} sample={sample} />
               </div>
             </div>
           </div>
@@ -287,11 +385,12 @@ export function CvBuilder() {
       {/* What actually gets printed. The on-screen preview lives inside a
           scale() transform and a clipped, fixed-height box; printing that
           element gave a blank first page and the CV shrunk across four pages.
-          This copy sits directly under <body>, untransformed, at true A4. */}
+          This copy sits directly under <body>, untransformed, at true A4 —
+          and holds her real details only, never the sample content. */}
       {isClient &&
         createPortal(
           <div id="cv-print-root" aria-hidden="true">
-            <CvSheet data={preview} template={template} print />
+            <CvSheet data={printable} template={template} print />
           </div>,
           document.body,
         )}
