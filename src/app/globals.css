@@ -31,9 +31,9 @@
   --color-canvas: #f4f5f7; /* light grey section bg */
 
   /* Typography — Ping HL is the brand face across the WHOLE system (Hebrew
-     and Latin alike). Drop the licensed files into /public/fonts (see the
-     @font-face rules below) and it applies everywhere instantly; until then
-     Assistant/Poppins stand in with near-identical metrics. */
+     and Latin alike). It is first in the stack, so a locally installed copy
+     is picked up as is; until the licensed web files are added (see the note
+     below the theme) Assistant/Poppins stand in with near-identical metrics. */
   --font-sans: "Ping HL", var(--font-assistant, "Assistant"), ui-sans-serif, system-ui, sans-serif;
   --font-display: "Ping HL", var(--font-poppins, "Poppins"), var(--font-assistant, "Assistant"), sans-serif;
 
@@ -57,20 +57,22 @@
   }
 }
 
-/* Brand font: place PingHL-Regular.woff2 / PingHL-Bold.woff2 in /public/fonts
-   and the whole system switches to Ping automatically. */
-@font-face {
-  font-family: "Ping HL";
-  src: url("/fonts/PingHL-Regular.woff2") format("woff2");
-  font-weight: 300 500;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Ping HL";
-  src: url("/fonts/PingHL-Bold.woff2") format("woff2");
-  font-weight: 600 900;
-  font-display: swap;
-}
+/* No @font-face for Ping HL yet: the rules pointed at /fonts/PingHL-*.woff2,
+   which were never delivered, so every page load fired two 404s. When the
+   files land in /public/fonts, add them back here:
+
+   @font-face {
+     font-family: "Ping HL";
+     src: url("/fonts/PingHL-Regular.woff2") format("woff2");
+     font-weight: 300 500;
+     font-display: swap;
+   }
+   @font-face {
+     font-family: "Ping HL";
+     src: url("/fonts/PingHL-Bold.woff2") format("woff2");
+     font-weight: 600 900;
+     font-display: swap;
+   } */
 
 html {
   scroll-behavior: smooth;
