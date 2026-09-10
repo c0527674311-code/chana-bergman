@@ -65,6 +65,10 @@ export function Select({
   const id = useId();
   const errId = `${id}-err`;
   const norm = options.map((o) => (typeof o === "string" ? { value: o, label: o } : o));
+  // A stored value outside the list (an imported city, say) must still show,
+  // or saving the form would silently erase it.
+  const stored = typeof props.defaultValue === "string" ? props.defaultValue : "";
+  if (stored && !norm.some((o) => o.value === stored)) norm.push({ value: stored, label: stored });
   return (
     <div className={className}>
       <label htmlFor={id} className="sr-only">
@@ -112,9 +116,9 @@ export function MultiSelect({
   const id = useId();
   const errId = `${id}-err`;
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<string[]>(() =>
-    defaultValue.filter((v) => options.includes(v)),
-  );
+  // Stored values outside the list stay selectable, or saving would drop them.
+  const allOptions = [...options, ...defaultValue.filter((v) => !options.includes(v))];
+  const [selected, setSelected] = useState<string[]>(() => [...defaultValue]);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -186,7 +190,7 @@ export function MultiSelect({
           aria-multiselectable="true"
           className="absolute inset-x-0 top-full z-20 mt-2 max-h-60 overflow-y-auto rounded-[22px] bg-white p-2 shadow-[var(--shadow-pop)] ring-1 ring-ink/10"
         >
-          {options.map((o) => {
+          {allOptions.map((o) => {
             const checked = selected.includes(o);
             return (
               <label

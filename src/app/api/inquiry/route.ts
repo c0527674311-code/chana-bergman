@@ -1,24 +1,34 @@
 import { NextResponse } from "next/server";
 import { adminConfigured, createAdminClient } from "@/lib/supabase/admin";
 import { saveDevSubmission } from "@/lib/dev-fallback";
+import { INQUIRY_COMPANY } from "@/lib/leads";
+import { notifyOwner } from "@/lib/notify";
+import { rateLimited } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
+export const maxDuration = 30;
 
 /**
  * General inquiries from the homepage "שאלות?" form.
  *
  * Stored in employer_leads with a fixed company marker so they surface in the
- * same back-office inbox Chana already checks — a general inquiry and an
- * employer lead both mean "someone is waiting for a reply".
+ * same back-office inbox as employer leads — both mean "someone is waiting
+ * for a reply" — and announced to Chana by email.
  */
 export async function POST(request: Request) {
   const form = await request.formData().catch(() => null);
   if (!form) return NextResponse.json({ error: "בקשה לא תקינה." }, { status: 400 });
 
-  const firstName = String(form.get("first_name") ?? "").trim();
-  const lastName = String(form.get("last_name") ?? "").trim();
-  const email = String(form.get("email") ?? "").trim();
-  const phone = String(form.get("phone") ?? "").trim();
+  // Bots fill every field; people never see this one.
+  if (String(form.get("company_website") ?? "").trim()) return NextResponse.json({ ok: true });
+  if (rateLimited(request, "inquiry", 10, 10 * 60_000)) {
+    return NextResponse.json({ error: "יותר מדי פניות בזמן קצר. נסי שוב בעוד כמה דקות." }, { status: 429 });
+  }
+
+  const firstName = String(form.get("first_name") ?? "").trim().slice(0, 100);
+  const lastName = String(form.get("last_name") ?? "").trim().slice(0, 100);
+  const email = String(form.get("email") ?? "").trim().slice(0, 200);
+  const phone = String(form.get("phone") ?? "").trim().slice(0, 40);
   const message = String(form.get("message") ?? "").trim().slice(0, 5000);
 
   if (!firstName) return NextResponse.json({ error: "נא למלא שם פרטי." }, { status: 400 });
@@ -28,7 +38,7 @@ export async function POST(request: Request) {
   if (!message) return NextResponse.json({ error: "נא לכתוב את תוכן הפנייה." }, { status: 400 });
 
   const record = {
-    company_name: "פנייה כללית מהאתר",
+    company_name: INQUIRY_COMPANY,
     contact_name: [firstName, lastName].filter(Boolean).join(" "),
     email,
     phone: phone || null,
@@ -48,6 +58,18 @@ export async function POST(request: Request) {
     const admin = createAdminClient();
     const { error } = await admin.from("employer_leads").insert(record);
     if (error) throw error;
+
+    await notifyOwner(
+      `שאלה חדשה מהאתר: ${record.contact_name}`,
+      [
+        ["שם", record.contact_name],
+        ["מייל", email],
+        ["טלפון", phone],
+        ["הפנייה", message],
+      ],
+      { replyTo: email },
+    );
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("inquiry failed:", err);

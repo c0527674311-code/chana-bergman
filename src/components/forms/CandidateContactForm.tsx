@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Field";
+import { Honeypot } from "@/components/ui/Honeypot";
 
 type State = { kind: "idle" | "sending" | "sent" } | { kind: "error"; message: string };
 
@@ -54,6 +55,7 @@ export function CandidateContactForm() {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
+      <Honeypot />
       <div className="grid gap-4 sm:grid-cols-2">
         <Input label="שם פרטי" name="first_name" required autoComplete="given-name" />
         <Input label="שם משפחה" name="last_name" autoComplete="family-name" />

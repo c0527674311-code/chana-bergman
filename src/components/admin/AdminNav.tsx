@@ -9,6 +9,7 @@ const ITEMS = [
   { href: "/admin/match", label: "איתור לפי דרישה", badge: "★" },
   { href: "/admin/candidates", label: "מאגר המועמדות" },
   { href: "/admin/requirements", label: "דרישות ומשרות" },
+  { href: "/admin/leads", label: "פניות מהאתר" },
   { href: "/admin/campaigns", label: "דיוור קבוצתי" },
   { href: "/admin/posts", label: "ניהול הבלוג" },
   { href: "/admin/import", label: "ייבוא מסיבי" },

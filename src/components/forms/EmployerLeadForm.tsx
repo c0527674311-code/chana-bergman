@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { Input, Textarea } from "@/components/ui/Field";
 import { FileDrop } from "@/components/ui/FileDrop";
+import { Honeypot } from "@/components/ui/Honeypot";
 import { Button } from "@/components/ui/Button";
 import { HOME } from "@/lib/content/site";
+import { uploadFile } from "@/lib/upload-client";
 
 type State = { kind: "idle" | "sending" | "sent" } | { kind: "error"; message: string };
 
@@ -16,10 +18,21 @@ export function EmployerLeadForm() {
     const form = e.currentTarget;
     setState({ kind: "sending" });
     try {
-      const res = await fetch("/api/employer-lead", {
-        method: "POST",
-        body: new FormData(form),
-      });
+      const body = new FormData(form);
+
+      // A requirements document can be a large scan, and the server can't
+      // receive a request over 4.5MB. It goes straight to storage instead.
+      const attachment = body.get("attachment");
+      if (attachment instanceof File && attachment.size > 0) {
+        const path = await uploadFile(attachment, "lead");
+        if (path) {
+          body.delete("attachment");
+          body.set("attachment_path", path);
+          body.set("attachment_name", attachment.name);
+        }
+      }
+
+      const res = await fetch("/api/employer-lead", { method: "POST", body });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error ?? "שליחת הטופס נכשלה. נסו שוב או שלחו לנו מייל.");
       form.reset();
@@ -60,6 +73,7 @@ export function EmployerLeadForm() {
 
   return (
     <form onSubmit={onSubmit} noValidate={false} className="flex flex-col gap-4">
+      <Honeypot />
       <div className="grid gap-4 sm:grid-cols-2">
         <Input label="שם החברה" name="company_name" required autoComplete="organization" />
         <Input label="שם איש קשר" name="contact_name" autoComplete="name" />

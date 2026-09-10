@@ -1,27 +1,81 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Field";
 import { FileDrop } from "@/components/ui/FileDrop";
+import { Honeypot } from "@/components/ui/Honeypot";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { CandidateProfileFields } from "./CandidateProfileFields";
 import { extractFromTranscript } from "@/lib/voice-extract";
+import { uploadFile } from "@/lib/upload-client";
 import type { Candidate } from "@/lib/types";
 
 type State = { kind: "idle" | "saving" } | { kind: "error"; message: string } | { kind: "done" };
-type ScanState = "idle" | "scanning" | "done" | "unavailable" | "failed" | "voice-fallback";
+type ScanState =
+  | "idle"
+  | "scanning"
+  | "done"
+  | "unavailable"
+  | "failed"
+  | "upload-failed"
+  | "voice-fallback";
+type ScanResult = {
+  status: "done" | "unavailable" | "failed";
+  fields?: Record<string, unknown>;
+  message?: string;
+};
+
+const TEXT_FIELDS = [
+  "first_name",
+  "last_name",
+  "email",
+  "phone",
+  "city",
+  "experience_years",
+  "notes_from_candidate",
+] as const;
+const LIST_FIELDS = [
+  "preferred_regions",
+  "spoken_languages",
+  "programming_languages",
+  "technologies",
+] as const;
+
+/** Only the fields a scan actually found, so a partial parse blanks nothing. */
+function scannedFields(f: Record<string, unknown>): Partial<Candidate> {
+  const next: Record<string, unknown> = {};
+  for (const key of ["first_name", "last_name", "email", "phone", "city", "experience_years"]) {
+    if (typeof f[key] === "string" && f[key]) next[key] = f[key];
+  }
+  // The parser returns one `preferred_region`; the form holds a list. Reading
+  // `preferred_regions` here meant a scanned region never reached the form.
+  const regions = Array.isArray(f.preferred_regions)
+    ? f.preferred_regions
+    : f.preferred_region
+      ? [f.preferred_region]
+      : [];
+  if (regions.length) next.preferred_regions = regions;
+  for (const key of ["programming_languages", "technologies", "spoken_languages"]) {
+    if (Array.isArray(f[key]) && (f[key] as unknown[]).length) next[key] = f[key];
+  }
+  return next as Partial<Candidate>;
+}
+
+function sameFile(a: File, b: File) {
+  return a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
+}
 
 /**
  * One form, two jobs: anonymous CV submission (`mode="submit"`) and editing an
- * existing profile (`mode="edit"`). Both post to /api/candidate, which runs
- * dedup before writing.
+ * existing profile (`mode="edit"`). Both post to /api/candidate.
  *
- * Submit flow is upload-first: the moment a file is chosen it is sent to
- * /api/parse-cv, and the extracted fields become the form's new defaults (the
- * fields block is remounted via `key`). The candidate reviews, fixes anything
- * the scan got wrong, and submits. The scan failing never blocks submission.
+ * Submit flow is upload-first: the moment a file is chosen it is uploaded
+ * straight to storage and scanned by /api/parse-cv, and the extracted fields
+ * become the form's new defaults (the fields block is remounted via `key`).
+ * The candidate reviews, fixes anything the scan got wrong, and submits. The
+ * scan failing never blocks submission.
  */
 export function CandidateForm({
   candidate,
@@ -33,53 +87,94 @@ export function CandidateForm({
   submitLabel?: string;
 }) {
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [state, setState] = useState<State>({ kind: "idle" });
   const [scan, setScan] = useState<ScanState>("idle");
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [prefill, setPrefill] = useState<Partial<Candidate> | null>(null);
   const [prefillVersion, setPrefillVersion] = useState(0);
   const [voiceTranscript, setVoiceTranscript] = useState("");
+  // The upload of the chosen file, started the moment she picks it and reused on submit.
+  const uploadRef = useRef<{ file: File; path: Promise<string | null> } | null>(null);
 
-  function applyParsed(f: Record<string, unknown>) {
-    // Keep only fields the scan actually found, so a partial parse doesn't
-    // blank out values the candidate already typed.
-    const next: Partial<Candidate> = {};
-    if (f.first_name) next.first_name = f.first_name as string;
-    if (f.last_name) next.last_name = f.last_name as string;
-    if (f.email) next.email = f.email as string;
-    if (f.phone) next.phone = f.phone as string;
-    if (f.city) next.city = f.city as string;
-    if (f.preferred_regions) next.preferred_regions = f.preferred_regions as string[];
-    if (f.experience_years) next.experience_years = f.experience_years as string;
-    if ((f.programming_languages as string[])?.length)
-      next.programming_languages = f.programming_languages as string[];
-    if ((f.technologies as string[])?.length) next.technologies = f.technologies as string[];
-    if ((f.spoken_languages as string[])?.length)
-      next.spoken_languages = f.spoken_languages as string[];
-    // Merge on top of whatever is already pre-filled (e.g. the instant local
-    // extraction from a voice transcript) — the model wins per field.
-    setPrefill((p) => ({ ...p, ...next }));
+  /**
+   * Puts scanned values into the fields, which remount with them as defaults.
+   * Whatever she already typed herself stays — remounting used to wipe it.
+   */
+  function fillFields(scanned: Partial<Candidate>) {
+    const typed = formRef.current ? new FormData(formRef.current) : null;
+    setPrefill((p) => {
+      const shown: Record<string, unknown> = { ...candidate, ...p };
+      const next: Record<string, unknown> = { ...p, ...scanned };
+      if (typed) {
+        for (const key of TEXT_FIELDS) {
+          const value = String(typed.get(key) ?? "").trim();
+          if (value && value !== String(shown[key] ?? "")) next[key] = value;
+        }
+        for (const key of LIST_FIELDS) {
+          const value = typed.getAll(key).map(String);
+          const was = (shown[key] as string[] | undefined) ?? [];
+          if (value.length !== was.length || value.some((v) => !was.includes(v))) next[key] = value;
+        }
+        const ask = typed.get("contact_before_sending");
+        if (ask) next.contact_before_sending = ask === "yes";
+      }
+      return next as Partial<Candidate>;
+    });
     setPrefillVersion((v) => v + 1);
   }
 
-  async function parseWith(file: File, voice: boolean): Promise<"done" | "unavailable" | "failed"> {
-    const body = new FormData();
-    body.set("file", file);
-    if (voice) body.set("voice", "1");
-    const res = await fetch("/api/parse-cv", { method: "POST", body });
-    if (res.status === 503) return "unavailable";
+  async function scanFile(file: File, opts: { voice?: boolean; path?: string | null }): Promise<ScanResult> {
+    let res: Response;
+    if (opts.path) {
+      res = await fetch("/api/parse-cv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: opts.path, fileName: file.name }),
+      });
+    } else {
+      const body = new FormData();
+      body.set("file", file);
+      if (opts.voice) body.set("voice", "1");
+      res = await fetch("/api/parse-cv", { method: "POST", body });
+    }
+    if (res.status === 503) return { status: "unavailable" };
     const json = await res.json().catch(() => ({}));
-    if (!res.ok || !json.fields) return "failed";
-    applyParsed(json.fields);
-    return "done";
+    if (!res.ok || !json.fields) return { status: "failed", message: json.error };
+    return { status: "done", fields: json.fields };
   }
 
   async function onCvFile(file: File | null) {
-    if (!file) return;
+    setScanMessage(null);
+    if (!file) {
+      uploadRef.current = null;
+      setScan("idle");
+      return;
+    }
+
+    const upload = { file, path: uploadFile(file, "cv") };
+    uploadRef.current = upload;
     setScan("scanning");
+
+    let path: string | null;
     try {
-      setScan(await parseWith(file, false));
+      path = await upload.path;
+    } catch (err) {
+      if (uploadRef.current !== upload) return;
+      setScanMessage(err instanceof Error ? err.message : null);
+      setScan("upload-failed");
+      return;
+    }
+
+    try {
+      const result = await scanFile(file, { path });
+      // She picked a different file while this one was being read.
+      if (uploadRef.current !== upload) return;
+      if (result.status === "done") fillFields(scannedFields(result.fields!));
+      setScanMessage(result.message ?? null);
+      setScan(result.status);
     } catch {
-      setScan("failed");
+      if (uploadRef.current === upload) setScan("failed");
     }
   }
 
@@ -89,38 +184,30 @@ export function CandidateForm({
     // Instant local extraction — fills fields immediately, no server needed.
     const local = extractFromTranscript(transcript);
     const localHits = Object.keys(local).length;
-    if (localHits) {
-      setPrefill((p) => ({ ...p, ...local }));
-      setPrefillVersion((v) => v + 1);
-    }
+    if (localHits) fillFields(local);
 
     // Then let the model refine (it merges on top when available).
     setScan("scanning");
     try {
-      const result = await parseWith(
+      const result = await scanFile(
         new File([transcript], "voice-transcript.txt", { type: "text/plain" }),
-        true,
+        { voice: true },
       );
-      if (result === "done") {
+      if (result.status === "done") {
         // The model reads the rest of a recording well, but drops a Latin letter
         // spoken in Hebrew ("סי" for c) and keeps recognizer hyphens between
         // digits. The local extractor handles both deterministically, so for
         // the address specifically it wins.
-        if (local.email) {
-          setPrefill((p) => ({ ...p, email: local.email }));
-          setPrefillVersion((v) => v + 1);
-        }
+        fillFields({ ...scannedFields(result.fields!), ...(local.email ? { email: local.email } : {}) });
         setScan("done");
         return;
       }
       // Model unavailable — keep the local fill, and preserve her words in the
       // notes field so nothing she said is lost.
-      setPrefill((p) => ({ ...p, notes_from_candidate: transcript, ...local }));
-      setPrefillVersion((v) => v + 1);
+      fillFields({ notes_from_candidate: transcript, ...local });
       setScan(localHits ? "done" : "voice-fallback");
     } catch {
-      setPrefill((p) => ({ ...p, notes_from_candidate: transcript, ...local }));
-      setPrefillVersion((v) => v + 1);
+      fillFields({ notes_from_candidate: transcript, ...local });
       setScan(localHits ? "done" : "voice-fallback");
     }
   }
@@ -133,7 +220,24 @@ export function CandidateForm({
     body.set("mode", mode);
 
     try {
+      // The file goes to storage, not in this request: the server rejects any
+      // request over 4.5MB, which is a single scanned CV.
+      const file = body.get("cv");
+      if (file instanceof File && file.size > 0) {
+        const started = uploadRef.current && sameFile(uploadRef.current.file, file) ? uploadRef.current.path : null;
+        const path = (await started?.catch(() => null)) ?? (await uploadFile(file, "cv"));
+        if (path) {
+          body.delete("cv");
+          body.set("cv_path", path);
+          body.set("cv_name", file.name);
+          body.set("cv_type", file.type);
+        }
+      }
+
       const res = await fetch("/api/candidate", { method: "POST", body });
+      // The uploaded file now belongs to the saved record (or the request
+      // failed somewhere after moving it); either way, never send that path again.
+      uploadRef.current = null;
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error ?? "השמירה נכשלה. נסי שוב.");
       if (mode === "edit") {
@@ -144,6 +248,7 @@ export function CandidateForm({
         setPrefill(null);
         setVoiceTranscript("");
         setScan("idle");
+        setScanMessage(null);
         setState({ kind: "done" });
       }
     } catch (err) {
@@ -245,7 +350,13 @@ export function CandidateForm({
       )}
       {scan === "failed" && (
         <p role="status" className="mt-2 rounded-2xl bg-canvas px-4 py-2.5 text-[14px] text-ink/70">
-          לא הצלחנו לקרוא את הקובץ אוטומטית — אפשר למלא את הפרטים ידנית, הקובץ עצמו יישלח כרגיל.
+          {scanMessage ?? "לא הצלחנו לקרוא את הקובץ אוטומטית."} אפשר למלא את הפרטים ידנית, הקובץ
+          עצמו יישלח כרגיל.
+        </p>
+      )}
+      {scan === "upload-failed" && (
+        <p role="alert" className="mt-2 rounded-2xl bg-red-50 px-4 py-2.5 text-[14px] font-medium text-red-700">
+          {scanMessage ?? "העלאת הקובץ נכשלה."} בשליחת הטופס ננסה להעלות אותו שוב.
         </p>
       )}
       {/* 503 from /api/parse-cv means the scan is switched off server-side (no
@@ -267,7 +378,8 @@ export function CandidateForm({
   );
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-5">
+    <form ref={formRef} onSubmit={onSubmit} className="flex flex-col gap-5">
+      <Honeypot />
       {/* Rides along on submit; stored server-side as the CV document when no file was attached. */}
       <input type="hidden" name="voice_transcript" value={voiceTranscript} />
 
