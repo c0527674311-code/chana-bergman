@@ -90,7 +90,6 @@ export function decodeText(buffer: Buffer): string | null {
   }
   text = text.replace(/^\uFEFF/, "");
   if (!text.trim()) return null;
-  // eslint-disable-next-line no-control-regex
   const control = text.match(/[\u0000-\u0008\u000e-\u001f\ufffd]/g)?.length ?? 0;
   return control / text.length > 0.02 ? null : text;
 }
