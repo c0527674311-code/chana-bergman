@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CandidateFilters } from "@/components/admin/CandidateFilters";
 import { CandidateTable } from "@/components/admin/CandidateTable";
+import { LoadError } from "@/components/admin/LoadError";
 import { listCandidates, type CandidateFilters as Filters } from "@/lib/queries";
 
 export const metadata: Metadata = { title: "מאגר המועמדות" };
@@ -23,38 +24,44 @@ export default async function CandidatesPage({
     status: params.status,
   };
 
-  const candidates = await listCandidates(filters);
+  const { candidates, failed } = await listCandidates(filters);
 
   return (
     <>
       <header className="mb-6">
         <h1 className="text-[30px] font-extrabold text-navy">מאגר המועמדות</h1>
-        <p className="mt-2 text-[16px] text-ink/70">
-            נמצאו <strong className="text-navy">{candidates.length}</strong> מועמדות
-        </p>
+        {!failed && (
+          <p className="mt-2 text-[16px] text-ink/70">
+              נמצאו <strong className="text-navy">{candidates.length}</strong> מועמדות
+          </p>
+        )}
       </header>
 
       <CandidateFilters current={filters} />
       <div className="mt-6">
-        <CandidateTable
-          candidates={candidates.map((c) => ({
-            id: c.id,
-            name: [c.first_name, c.last_name].filter(Boolean).join(" "),
-            email: c.email,
-            phone: c.phone,
-            city: c.city,
-            region: c.preferred_regions?.join(" · ") ?? null,
-            experience: c.experience_years,
-            seniority: c.seniority,
-            institution: c.institution,
-            cohort: c.cohort_year,
-            stack: [...c.programming_languages, ...c.technologies],
-            status: c.status,
-            updatedAt: c.updated_at,
-            mailable: Boolean(c.email && c.consent_marketing && !c.unsubscribed_at),
-            unsubscribed: Boolean(c.unsubscribed_at),
-          }))}
-        />
+        {failed ? (
+          <LoadError />
+        ) : (
+          <CandidateTable
+            candidates={candidates.map((c) => ({
+              id: c.id,
+              name: [c.first_name, c.last_name].filter(Boolean).join(" "),
+              email: c.email,
+              phone: c.phone,
+              city: c.city,
+              region: c.preferred_regions?.join(" · ") ?? null,
+              experience: c.experience_years,
+              seniority: c.seniority,
+              institution: c.institution,
+              cohort: c.cohort_year,
+              stack: [...c.programming_languages, ...c.technologies],
+              status: c.status,
+              updatedAt: c.updated_at,
+              mailable: Boolean(c.email && c.consent_marketing && !c.unsubscribed_at),
+              unsubscribed: Boolean(c.unsubscribed_at),
+            }))}
+          />
+        )}
       </div>
     </>
   );

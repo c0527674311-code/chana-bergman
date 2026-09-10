@@ -4,49 +4,35 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { CampaignDialog } from "@/components/admin/CampaignDialog";
 import { ConsentButton, mailBlockReason } from "@/components/admin/ConsentButton";
+import type { ExtractedRequirement } from "@/lib/matching";
+import type { MatchResponse, MatchRow } from "@/lib/match-response";
 import { cn } from "@/lib/utils";
 
-type Row = {
-  id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  city: string | null;
-  region: string | null;
-  seniority: string | null;
-  experience: string | null;
-  institution: string | null;
-  cohort: number | null;
-  status: string;
-  mailable: boolean;
-  unsubscribed: boolean;
-  score: number;
-  reason: string;
-  matched: string[];
-  missing: string[];
-};
-
-type Extracted = {
-  technologies: string[];
-  programmingLanguages: string[];
-  seniority: string | null;
-  region: string | null;
-  minYears: number | null;
-};
+type Row = MatchRow;
+type Extracted = ExtractedRequirement;
 
 const SAMPLE = `דרוש/ה מפתח/ת Full Stack
 לפחות 3 שנות ניסיון בפיתוח ב-C# ו-.NET
 ניסיון ב-React וב-SQL Server
 העבודה באזור המרכז, היברידי`;
 
-export function MatchWorkbench() {
-  const [text, setText] = useState("");
-  const [rows, setRows] = useState<Row[] | null>(null);
-  const [extracted, setExtracted] = useState<Extracted | null>(null);
-  const [total, setTotal] = useState(0);
+export function MatchWorkbench({
+  initialText = "",
+  initialResult = null,
+  initialError = null,
+}: {
+  /** A saved requirement opened from the requirements list, already ranked on the server. */
+  initialText?: string;
+  initialResult?: MatchResponse | null;
+  initialError?: string | null;
+}) {
+  const [text, setText] = useState(initialText);
+  const [rows, setRows] = useState<Row[] | null>(initialResult?.results ?? null);
+  const [extracted, setExtracted] = useState<Extracted | null>(initialResult?.requirement ?? null);
+  const [total, setTotal] = useState(initialResult?.total ?? 0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
   const [campaignOpen, setCampaignOpen] = useState(false);
 
   const selectedRows = useMemo(
@@ -134,12 +120,13 @@ export function MatchWorkbench() {
               </span>
             ))}
             {extracted.seniority && <Chip>{extracted.seniority}</Chip>}
-            {extracted.region && <Chip>אזור {extracted.region}</Chip>}
-            {extracted.minYears != null && <Chip>מינימום {extracted.minYears} שנות ניסיון</Chip>}
+            {extracted.regions.length > 0 && <Chip>אזור {extracted.regions.join(" / ")}</Chip>}
+            {extracted.minYears != null && <Chip>מינימום {yearsLabel(extracted.minYears)}</Chip>}
             {!extracted.programmingLanguages.length &&
               !extracted.technologies.length &&
               !extracted.seniority &&
-              !extracted.region && (
+              !extracted.regions.length &&
+              extracted.minYears == null && (
                 <span className="text-[14px] text-ink/70">
                   לא זוהו דרישות ספציפיות — נסי לכתוב טכנולוגיות מפורשות.
                 </span>
@@ -290,6 +277,14 @@ function Chip({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** "חצי שנת ניסיון", "שנתיים ניסיון", "3 שנות ניסיון". */
+function yearsLabel(years: number): string {
+  if (years === 0.5) return "חצי שנת ניסיון";
+  if (years === 1) return "שנת ניסיון";
+  if (years === 2) return "שנתיים ניסיון";
+  return `${years} שנות ניסיון`;
+}
+
 function ScoreRing({ score }: { score: number }) {
   const tone = score >= 75 ? "text-mint-600" : score >= 45 ? "text-primary" : "text-ink/35";
   return (
@@ -313,15 +308,37 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
+/** One quoted CSV field. */
+function csvCell(value: unknown): string {
+  let s = String(value ?? "");
+  // Excel runs a cell that starts with = + - @ as a formula, and names and
+  // notes are typed by candidates on the public site.
+  if (/^[=+\-@]/.test(s)) s = "'" + s;
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+/**
+ * A phone as a text formula. Excel reads 0527674311 as a number — the leading
+ * zero is dropped and long numbers turn into 5.28E+08. `="0527674311"` is kept
+ * as text by Excel and by Google Sheets.
+ */
+function csvPhone(phone: string | null): string {
+  const digits = (phone ?? "").replace(/[^\d+\-() ]/g, "");
+  return digits ? `"=""${digits}"""` : '""';
+}
+
 function exportCsv(rows: Row[]) {
   const header = ["שם", "מייל", "טלפון", "עיר", "אזור", "ניסיון", "בכירות", "מוסד", "שנתון", "ציון", "סיבה"];
   const body = rows.map((r) =>
-    [r.name, r.email, r.phone, r.city, r.region, r.experience, r.seniority, r.institution, r.cohort, r.score, r.reason]
-      .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
-      .join(","),
+    [
+      csvCell(r.name),
+      csvCell(r.email),
+      csvPhone(r.phone),
+      ...[r.city, r.region, r.experience, r.seniority, r.institution, r.cohort, r.score, r.reason].map(csvCell),
+    ].join(","),
   );
   // BOM so Excel opens Hebrew correctly.
-  const blob = new Blob(["﻿" + [header.join(","), ...body].join("\n")], {
+  const blob = new Blob(["﻿" + [header.join(","), ...body].join("\r\n")], {
     type: "text/csv;charset=utf-8;",
   });
   const a = document.createElement("a");

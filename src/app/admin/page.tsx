@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LoadError } from "@/components/admin/LoadError";
 import { candidateStats } from "@/lib/queries";
 
 export default async function AdminDashboard() {
@@ -8,7 +9,7 @@ export default async function AdminDashboard() {
     { label: "מועמדות במאגר", value: stats.total, href: "/admin/candidates" },
     { label: "פעילות — מחפשות", value: stats.active, href: "/admin/candidates?status=active" },
     { label: "ניתן לדוור אליהן", value: stats.mailable, href: "/admin/campaigns" },
-    { label: "נוספו ב-30 הימים האחרונים", value: stats.addedLast30, href: "/admin/candidates" },
+    { label: "נרשמו דרך האתר ב-30 הימים האחרונים", value: stats.signedUpLast30, href: "/admin/candidates" },
   ];
 
   return (
@@ -20,6 +21,12 @@ export default async function AdminDashboard() {
         </p>
       </header>
 
+      {stats.failed && (
+        <div className="mb-6">
+          <LoadError />
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {tiles.map((t) => (
           <Link
@@ -29,7 +36,8 @@ export default async function AdminDashboard() {
           >
             <p className="text-[13px] font-semibold text-ink/55">{t.label}</p>
             <p className="mt-2 text-[34px] font-extrabold leading-none text-navy">
-              {t.value.toLocaleString("he-IL")}
+              {/* A failed load is not zero candidates. */}
+              {stats.failed ? "—" : t.value.toLocaleString("he-IL")}
             </p>
           </Link>
         ))}
@@ -65,7 +73,9 @@ export default async function AdminDashboard() {
               ))}
             </ul>
           ) : (
-            <p className="mt-3 text-[15px] text-ink/60">אין עדיין נתוני שנתונים.</p>
+            <p className="mt-3 text-[15px] text-ink/60">
+              {stats.failed ? "לא ניתן להציג שנתונים כרגע." : "אין עדיין נתוני שנתונים."}
+            </p>
           )}
           <Link
             href="/admin/import"

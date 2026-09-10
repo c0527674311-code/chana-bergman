@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { listCandidates } from "@/lib/queries";
-import { matchCandidates } from "@/lib/matching";
+import { runMatch } from "@/lib/match-response";
 import { requireAdmin } from "@/lib/auth-guard";
 
 export const runtime = "nodejs";
@@ -18,30 +17,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "נא להדביק את טקסט הדרישה." }, { status: 400 });
   }
 
-  const candidates = await listCandidates({}, 5000);
-  const { requirement, results } = matchCandidates(candidates, text, limit ?? 60);
-
-  return NextResponse.json({
-    requirement,
-    total: candidates.length,
-    results: results.map((r) => ({
-      id: r.candidate.id,
-      name: [r.candidate.first_name, r.candidate.last_name].filter(Boolean).join(" "),
-      email: r.candidate.email,
-      phone: r.candidate.phone,
-      city: r.candidate.city,
-      region: r.candidate.preferred_regions?.join(" · ") ?? null,
-      seniority: r.candidate.seniority,
-      experience: r.candidate.experience_years,
-      institution: r.candidate.institution,
-      cohort: r.candidate.cohort_year,
-      status: r.candidate.status,
-      mailable: Boolean(r.candidate.email && r.candidate.consent_marketing && !r.candidate.unsubscribed_at),
-      unsubscribed: Boolean(r.candidate.unsubscribed_at),
-      score: r.score,
-      reason: r.reason,
-      matched: r.matchedTechnologies,
-      missing: r.missingTechnologies,
-    })),
-  });
+  const outcome = await runMatch(text, limit ?? 60);
+  if ("error" in outcome) return NextResponse.json({ error: outcome.error }, { status: 500 });
+  return NextResponse.json(outcome);
 }

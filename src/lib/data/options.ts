@@ -212,10 +212,17 @@ export const SOURCE_LABELS: Record<string, string> = {
   referral: "הפניה",
 };
 
-/** Cohort years for the "שנתון" segmentation — current year back 12 years. */
+/** Earliest cohort offered. The imported archive reaches back to 2006. */
+export const FIRST_COHORT_YEAR = 2000;
+
+/**
+ * Cohort years for the "שנתון" segmentation, newest first: next year's class
+ * (students register before they graduate) back to FIRST_COHORT_YEAR. A fixed
+ * 12-year window hid every candidate from before 2014.
+ */
 export function cohortYears(now = new Date()): number[] {
-  const y = now.getFullYear();
-  return Array.from({ length: 13 }, (_, i) => y - i);
+  const newest = now.getFullYear() + 1;
+  return Array.from({ length: newest - FIRST_COHORT_YEAR + 1 }, (_, i) => newest - i);
 }
 
 export type Region = (typeof REGIONS)[number];

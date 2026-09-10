@@ -26,20 +26,69 @@ export type FolderClassification = {
   tags: string[];
 };
 
-/**
- * Experience phrasings that appear as folder names, mapped to our buckets.
- * Ordered longest-first so "מעל 10 שנים" is not swallowed by "מעל 1".
- */
-const EXPERIENCE_PATTERNS: Array<[RegExp, string]> = [
-  [/מעל\s*10|10\s*\+|יותר\s*מ-?\s*10/, "10+ שנים"],
-  [/7\s*-\s*10|מעל\s*7/, "7-10 שנים"],
-  [/מעל\s*5|5\s*-\s*7|5\s*\+/, "5-7 שנים"],
-  [/3\s*-\s*5|מעל\s*3/, "3-5 שנים"],
-  [/2\s*-\s*3|מעל\s*שנתיים/, "2-3 שנים"],
-  [/1\s*-\s*2|שנה\s*-?\s*שנתיים/, "1-2 שנים"],
-  [/עד\s*שנה|פחות\s*משנה/, "עד שנה"],
-  [/ללא\s*ניסיון|ג['׳]וניור|מתחילות/, "ללא ניסיון"],
+/** Bucket floors, highest first: "at least N years" lands in the bucket N falls in. */
+const BUCKET_FLOORS: Array<[number, string]> = [
+  [10, "10+ שנים"],
+  [7, "7-10 שנים"],
+  [5, "5-7 שנים"],
+  [3, "3-5 שנים"],
+  [2, "2-3 שנים"],
+  [1, "1-2 שנים"],
 ];
+
+function bucketFor(years: number): string {
+  return BUCKET_FLOORS.find(([floor]) => years >= floor)?.[1] ?? "עד שנה";
+}
+
+/** The ranges that are experience even without the word "שנים" after them. */
+const BUCKET_RANGES = new Set(["1-2", "2-3", "3-5", "5-7", "7-10"]);
+
+/** A number of years: digits, or the two Hebrew words folders use for 1 and 2. */
+const YEARS = String.raw`(\d{1,2}(?![\d.])|שנתיים|שנה(?!\p{L}))`;
+const toYears = (s: string) => (s === "שנתיים" ? 2 : s === "שנה" ? 1 : Number(s));
+
+/** "At least N years" phrasings: מעל 5, יותר מ-5, לפחות 5, 5+, +5, 5 שנים ומעלה. */
+const AT_LEAST: RegExp[] = [
+  new RegExp(String.raw`(?:מעל|יותר\s*מ|לפחות)\s*-?\s*${YEARS}`, "u"),
+  /(?<![\d.])(\d{1,2})\s*\+/u,
+  /\+\s*(\d{1,2})(?![\d.])/u,
+  new RegExp(String.raw`(?<![\d.])${YEARS}\s*(?:שנים|שנות)?\s*(?:ו?מעלה|ויותר)`, "u"),
+];
+
+/**
+ * Digits that belong to a date or a year span — "2021-2022", "11-2020",
+ * "2017-10", "3-5-2020", "1.2.2021". A folder named after a cohort or a date
+ * used to be read as "1-2 שנים" or "7-10 שנים".
+ */
+const DATE_LIKE =
+  /\d+(?:\s*[-–./]\s*\d+){2,}|\d{3,}(?:\s*[-–./]\s*\d+)+|\d+(?:\s*[-–./]\s*\d{3,})+/g;
+
+function experienceFromSegment(segment: string): string | null {
+  // An exact bucket name wins over a pattern guess.
+  const exact = EXPERIENCE_YEARS.find((b) =>
+    new RegExp(`(?<![\\d.\\-–])${b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(segment),
+  );
+  if (exact) return exact;
+
+  const s = segment.replace(DATE_LIKE, " ");
+
+  for (const re of AT_LEAST) {
+    const m = s.match(re);
+    if (m) return bucketFor(toYears(m[1]));
+  }
+
+  // "3-5", "7-10", or any range followed by the word "שנים". "21-22" is neither.
+  const range = s.match(/(?<![\d.])(\d{1,2})\s*[-–]\s*(\d{1,2})(?![\d.])(\s*שנ(?:ים|ות))?/u);
+  if (range) {
+    const [from, to] = [Number(range[1]), Number(range[2])];
+    if (from < to && (range[3] || BUCKET_RANGES.has(`${from}-${to}`))) return bucketFor(from);
+  }
+
+  if (/שנה\s*-?\s*שנתיים/.test(s)) return "1-2 שנים";
+  if (/עד\s*שנה|פחות\s*משנה/.test(s)) return "עד שנה";
+  if (/ללא\s*ניסיון|ג['׳]וניור|מתחילות/.test(s)) return "ללא ניסיון";
+  return null;
+}
 
 export function classifyFromPath(relativePath: string): FolderClassification {
   const empty: FolderClassification = {
@@ -62,23 +111,22 @@ export function classifyFromPath(relativePath: string): FolderClassification {
   // handles aliases and stops "SQL Server" from also reporting a bare "SQL".
   const extracted = extractRequirement(segments.join(" , "));
 
+  // A bare "QA" folder holds testers of every kind. The extractor reads "QA"
+  // as QA Automation — reasonable in an employer's requirement — but filing
+  // manual testers under automation sends them to the wrong jobs. There is no
+  // manual-QA technology to map to, so plain QA stays a tag only.
+  const technologies = extracted.technologies.filter(
+    (t) => t !== "QA Automation" || segments.some((s) => /automation|אוטומציה/i.test(s)),
+  );
+
   let experienceYears: string | null = null;
   for (const segment of segments) {
-    // An exact bucket name wins over a pattern guess.
-    const exact = EXPERIENCE_YEARS.find((b) => segment.includes(b));
-    if (exact) {
-      experienceYears = exact;
-      break;
-    }
-    const hit = EXPERIENCE_PATTERNS.find(([re]) => re.test(segment));
-    if (hit) {
-      experienceYears = hit[1];
-      break;
-    }
+    experienceYears = experienceFromSegment(segment);
+    if (experienceYears) break;
   }
 
   return {
-    technologies: extracted.technologies,
+    technologies,
     programmingLanguages: extracted.programmingLanguages,
     experienceYears,
     tags: segments,
