@@ -91,11 +91,14 @@ const SENIORITY_HINTS: Array<[RegExp, string]> = [
   [/ראש(ת|י)?\s*צוות|team\s*lead|tech\s*lead/i, "ראשת צוות"],
   [/ארכיטקט/i, "ארכיטקטית"],
   [/ג['׳]וניור|junior|מתחיל|ללא\s*ניסיון/i, "ג'וניורית"],
-  [/סטודנט|מתמח/i, "מתמחה"],
+  // "מתמחה" is also the verb "specialises": "מתמחה ב-React" is a skill, not
+  // an intern, and used to file every such requirement under מתמחה.
+  [/סטודנט|מתמח(?:ה|ות|ים|ת)?(?!\p{L})(?!\s*[-־]?\s*ב)/iu, "מתמחה"],
   [/בכיר|senior|סניור/i, "בכירה"],
   [/מנוס/i, "מנוסה"],
 ];
 
+/** Canonical form of a vocabulary term, for comparing terms with each other. */
 function norm(s: string): string {
   return s
     .toLowerCase()
@@ -105,26 +108,48 @@ function norm(s: string): string {
     .trim();
 }
 
+/**
+ * Normalise free text before searching it for terms. Same as norm(), except a
+ * hyphen between two Latin letters/digits survives: "go-to" stays one token,
+ * so the language Go is not read out of it. A hyphen or maqaf next to Hebrew
+ * ("ב-React", "ה־SQL") still separates.
+ */
+function normText(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/־/g, " ") // maqaf, before the niqqud range swallows it
+    .replace(/[֑-ׇ]/g, "")
+    .replace(/(?<![a-z0-9])-|-(?![a-z0-9])/g, " ")
+    .replace(/[._/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const HEBREW = /[֐-׿]/;
 
 /**
  * Whole-token containment.
  *
- * Two subtleties this has to get right:
+ * Subtleties this has to get right:
  *  - `#` and `+` count as part of the token, otherwise the language "C"
  *    matches inside "C#" and "C++" and every C# CV looks like a C CV.
- *  - Hebrew terms take inseparable one-letter prefixes (ה/ב/ל/מ/ו/ש/כ), so
- *    "אזור המרכז" must still match the region "מרכז".
+ *  - `&` joins a token too ("R&D" is not the language R), and for one- and
+ *    two-letter terms so does a Latin hyphen ("go-to" is not Go, "C-level" is
+ *    not C). Longer terms keep matching in compounds like "React-based".
+ *  - Hebrew glues one-letter prefixes (ו/ה/ב/כ/ל/מ/ש) onto the next word, up
+ *    to two of them, and onto Latin terms as well: "אזור המרכז" must match the
+ *    region "מרכז", and "בReact", "וJava", "ולפייתון" must match their skill.
  */
 function termPattern(needle: string): RegExp | null {
   const n = norm(needle);
   if (!n) return null;
-  const escaped = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const prefix = HEBREW.test(n) ? "[הבלמושכ]?" : "";
-  return new RegExp(
-    `(^|[^\\p{L}\\p{N}#+])${prefix}${escaped}([^\\p{L}\\p{N}#+]|$)`,
-    "giu",
-  );
+  const escaped = n
+    .split(" ")
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("[\\s-]+");
+  const joiners = !HEBREW.test(n) && n.length <= 2 ? "&\\-" : "&";
+  const edge = `\\p{L}\\p{N}#+${joiners}`;
+  return new RegExp(`(?<![${edge}])(?:[הבלמושכ]{1,2})?${escaped}(?![${edge}])`, "giu");
 }
 
 function mentions(haystack: string, needle: string): boolean {
@@ -133,29 +158,91 @@ function mentions(haystack: string, needle: string): boolean {
 }
 
 /**
- * Blank out every occurrence of `needle`, keeping the surrounding boundary
- * characters so neighbouring terms still match. Used to let a longer term
- * consume its own text before shorter ones are tested against what is left.
+ * Blank out every occurrence of `needle`, keeping the text length so
+ * neighbouring terms still match. Used to let a longer term consume its own
+ * text before shorter ones are tested against what is left.
  */
 function blankTerm(haystack: string, needle: string): string {
   const re = termPattern(needle);
   if (!re) return haystack;
-  return haystack.replace(re, (m, pre: string, post: string) =>
-    pre + " ".repeat(Math.max(0, m.length - pre.length - post.length)) + post,
-  );
+  return haystack.replace(re, (m) => " ".repeat(m.length));
 }
 
 export type ExtractedRequirement = {
   technologies: string[];
   programmingLanguages: string[];
   seniority: string | null;
-  region: string | null;
+  /** Every region the requirement names — "בשרון או במרכז" is both. */
+  regions: string[];
   minYears: number | null;
 };
 
+/** Hebrew number words written before "שנים"/"שנות". */
+const YEAR_WORDS: Record<string, number> = {
+  שתי: 2,
+  שלוש: 3,
+  ארבע: 4,
+  חמש: 5,
+  שש: 6,
+  שבע: 7,
+  שמונה: 8,
+  תשע: 9,
+  עשר: 10,
+};
+
+/**
+ * Minimum years of experience the text asks for, or null.
+ *
+ * Every phrasing below is collected and the earliest one in the text wins —
+ * "לפחות 5 שנות ניסיון, מתוכן שנתיים בניהול" asks for 5, not 2.
+ */
+function extractMinYears(text: string): number | null {
+  // Percentages are job scope ("80% משרה"), never experience. Removed first so
+  // no pattern below can read the number.
+  const t = text
+    .replace(/[֑-ׇ]/g, "")
+    .replace(/\d+(?:[.,]\d+)?\s*(?:%|אחוז(?:ים)?)/g, " ");
+
+  const hits: Array<{ index: number; years: number }> = [];
+  const collect = (re: RegExp, years: (m: RegExpExecArray) => number) => {
+    for (const m of t.matchAll(re)) {
+      const y = years(m);
+      if (Number.isFinite(y) && y <= 50) hits.push({ index: m.index, years: y });
+    }
+  };
+
+  // "3 שנים", "2+ שנים", "+2 שנים", "לפחות 3 שנים", "3.5 years". A range
+  // ("3-5 שנות ניסיון", "3 עד 5 שנים") asks for its lower bound.
+  collect(
+    /(?<![\d.])(\d+(?:\.\d+)?)(?:\s*(?:[-–—]|עד)\s*\d+(?:\.\d+)?)?\s*\+?\s*(?:שנות|שנים|שנה|שנ['׳]|years?|yrs?)(?!\p{L})/giu,
+    (m) => Number(m[1]),
+  );
+  // "minimum 4" without a unit — but not "לפחות 3 ימים בשבוע".
+  collect(
+    /(?:לפחות|מינימום|(?<!\p{L})(?:minimum|min|at\s+least))\s*:?\s*(\d+(?:\.\d+)?)(?![\d.]|\s*(?:חודש|ימ|יום|שעות|שעה|עובד|months?|days?|hours?))/giu,
+    (m) => Number(m[1]),
+  );
+  collect(/(?<!\p{L})חצי\s*שנ(?:ה|ת)(?!\p{L})/gu, () => 0.5);
+  // "שנתיים", "משנתיים" (than two years) — but not "לשנתיים" (for two years).
+  collect(/(?<!\p{L})[ובכמ]?שנתיים(?!\p{L})/gu, () => 2);
+  collect(
+    /(?<!\p{L})(שתי|שלוש|ארבע|חמש|שש|שבע|שמונה|תשע|עשר)\s+שנ(?:ות|ים)(?!\p{L})/gu,
+    (m) => YEAR_WORDS[m[1]],
+  );
+  // A single year needs context — "שנה" alone is also "השנה", "שנה א'".
+  collect(
+    /(?<!\p{L})(?:(?:לפחות|מינימום|מעל|יותר\s*מ-?|ניסיון\s+של)\s*)שנ(?:ה|ת)(?:\s+אחת)?(?!\p{L})/gu,
+    () => 1,
+  );
+  collect(/(?<!\p{L})[ובכ]?שנ(?:ה|ת)(?:\s+אחת)?\s+(?:ניסיון|לפחות)(?!\p{L})/gu, () => 1);
+
+  if (!hits.length) return null;
+  return hits.reduce((first, h) => (h.index < first.index ? h : first)).years;
+}
+
 /** Pull structured requirements out of a free-text job description. */
 export function extractRequirement(text: string): ExtractedRequirement {
-  const h = norm(text);
+  const h = normText(text);
 
   const technologies: string[] = [];
   const programmingLanguages: string[] = [];
@@ -191,15 +278,13 @@ export function extractRequirement(text: string): ExtractedRequirement {
     }
   }
 
-  const region = REGIONS.find((r) => mentions(h, r)) ?? null;
+  // All of them: taking the first hit in list order turned "בשרון או במרכז"
+  // into a מרכז-only search, and a candidate in the שרון lost the points.
+  const regions = REGIONS.filter((r) => mentions(h, r));
 
-  // "3 שנות ניסיון" / "3+ years"
-  const yearMatch =
-    text.match(/(\d+)\s*\+?\s*(?:שנ(?:ות|ים|ה)|years?)/i) ??
-    text.match(/(?:לפחות|minimum|min)\s*(\d+)/i);
-  const minYears = yearMatch ? Number(yearMatch[1]) : null;
+  const minYears = extractMinYears(text);
 
-  return { technologies, programmingLanguages, seniority, region, minYears };
+  return { technologies, programmingLanguages, seniority, regions, minYears };
 }
 
 /** Lower bound of an experience bucket, for comparing against minYears. */
@@ -207,11 +292,17 @@ function bucketFloor(bucket: string | null): number {
   if (!bucket) return 0;
   const m = bucket.match(/(\d+)/);
   if (bucket.includes("ללא")) return 0;
-  if (bucket.includes("עד שנה")) return 0;
+  // Some experience, under a year — enough for "חצי שנה", not for "שנה".
+  if (bucket.includes("עד שנה")) return 0.5;
   return m ? Number(m[1]) : 0;
 }
 
 const WEIGHTS = { tech: 5, lang: 6, seniority: 3, region: 2, years: 3, freshness: 1 };
+
+/** The first required region the candidate is available in, if any. */
+function matchingRegion(c: Candidate, req: ExtractedRequirement): string | null {
+  return req.regions.find((r) => (c.preferred_regions ?? []).includes(r) || c.city === r) ?? null;
+}
 
 /**
  * Score one candidate against an extracted requirement.
@@ -246,11 +337,10 @@ export function scoreCandidate(
     if (candidate.seniority === req.seniority) score += WEIGHTS.seniority;
   }
 
-  if (req.region) {
+  const region = matchingRegion(candidate, req);
+  if (req.regions.length) {
     max += WEIGHTS.region;
-    if ((candidate.preferred_regions ?? []).includes(req.region) || candidate.city === req.region) {
-      score += WEIGHTS.region;
-    }
+    if (region) score += WEIGHTS.region;
   }
 
   if (req.minYears != null) {
@@ -273,7 +363,7 @@ export function scoreCandidate(
   return {
     candidate,
     score: pct,
-    reason: buildReason(candidate, matchedLangs, matchedTechnologies, missingLangs.concat(missingTechnologies), req),
+    reason: buildReason(candidate, matchedLangs, matchedTechnologies, missingLangs.concat(missingTechnologies), req, region),
     matchedTechnologies: [...matchedLangs, ...matchedTechnologies],
     missingTechnologies: [...missingLangs, ...missingTechnologies],
   };
@@ -286,6 +376,7 @@ function buildReason(
   matchedTech: string[],
   missing: string[],
   req: ExtractedRequirement,
+  region: string | null,
 ): string {
   const parts: string[] = [];
   const hits = [...matchedLangs, ...matchedTech];
@@ -300,9 +391,7 @@ function buildReason(
     );
   }
   if (req.seniority && c.seniority === req.seniority) parts.push(c.seniority);
-  if (req.region && ((c.preferred_regions ?? []).includes(req.region) || c.city === req.region)) {
-    parts.push("אזור " + req.region);
-  }
+  if (region) parts.push("אזור " + region);
   let line = parts.length ? parts.join(" · ") : "התאמה חלקית";
   if (missing.length) line += ` · חסר: ${missing.slice(0, 3).join(", ")}`;
   return line;
