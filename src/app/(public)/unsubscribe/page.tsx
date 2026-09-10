@@ -1,68 +1,92 @@
 import type { Metadata } from "next";
 import { PageShell } from "@/components/site/PageShell";
 import { Section } from "@/components/site/Section";
-import { ButtonLink } from "@/components/ui/Button";
-import { adminConfigured, createAdminClient } from "@/lib/supabase/admin";
+import { Button, ButtonLink } from "@/components/ui/Button";
+import { CONTACT_DETAILS } from "@/lib/content/site";
+import { subscriptionStatus } from "@/lib/unsubscribe";
 import { getCurrentUser } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "הסרה מרשימת התפוצה", robots: { index: false, follow: false } };
 
 /**
- * One-click unsubscribe target for the link in every campaign email.
+ * Target of the unsubscribe link in every campaign email.
  *
  * Required by amendment 40 to the Israeli Communications Law: the opt-out must
- * work without the recipient having to log in or reply. Honoured immediately —
- * `unsubscribed_at` excludes her from every future send.
+ * work without the recipient having to log in or reply. Rendering this page
+ * changes nothing — it used to unsubscribe on load, and the link scanners in
+ * mail filters open every link, so people were removed without ever clicking.
+ * The button POSTs to /api/unsubscribe, which is also the one-click endpoint
+ * mail clients call directly.
  */
 export default async function UnsubscribePage({
   searchParams,
 }: {
-  searchParams: Promise<{ c?: string }>;
+  searchParams: Promise<{ c?: string | string[]; done?: string; failed?: string }>;
 }) {
-  const { c } = await searchParams;
-  const user = await getCurrentUser();
+  const params = await searchParams;
+  const c = typeof params.c === "string" ? params.c.trim() : undefined;
+  const [user, status] = await Promise.all([getCurrentUser(), subscriptionStatus(c)]);
 
-  let state: "done" | "missing" | "error" = "missing";
-
-  if (c && adminConfigured()) {
-    try {
-      const admin = createAdminClient();
-      const { error } = await admin
-        .from("candidates")
-        .update({ unsubscribed_at: new Date().toISOString(), consent_marketing: false })
-        .eq("id", c);
-      state = error ? "error" : "done";
-      if (!error) {
-        await admin.from("activity_log").insert({ candidate_id: c, kind: "unsubscribed" });
-      }
-    } catch {
-      state = "error";
-    }
-  }
+  // The query flags only choose between true states; the database decides.
+  const view =
+    status === "already"
+      ? params.done
+        ? "done"
+        : "already"
+      : status === "subscribed"
+        ? params.failed
+          ? "error"
+          : "confirm"
+        : status;
 
   const copy = {
+    confirm: {
+      title: "הסרה מרשימת התפוצה",
+      body: "בלחיצה על הכפתור לא יישלחו אלייך יותר מיילים על משרות. קורות החיים שלך נשארים במאגר.",
+    },
     done: {
       title: "הוסרת מרשימת התפוצה",
       body: "לא נשלח אלייך יותר מיילים על משרות. קורות החיים שלך נשארים במאגר — אם תרצי שנמחק אותם לגמרי, כתבי לנו.",
     },
-    missing: {
+    already: {
+      title: "כבר הוסרת מרשימת התפוצה",
+      body: "הכתובת שלך כבר לא ברשימת התפוצה, ולא יישלחו אלייך מיילים על משרות.",
+    },
+    invalid: {
       title: "הקישור אינו תקין",
-      body: "נראה שהקישור חסר או פג תוקף. אפשר לכתוב לנו ונסיר אותך ידנית.",
+      body: "לא מצאנו את הפרטים שבקישור — ייתכן שהוא חסר או הועתק חלקית. אפשר לכתוב לנו ונסיר אותך ידנית.",
     },
     error: {
       title: "משהו השתבש",
       body: "לא הצלחנו להסיר אותך אוטומטית. כתבי לנו ונטפל בזה מיד.",
     },
-  }[state];
+  }[view];
 
   return (
     <PageShell user={user} title={copy.title}>
       <Section>
         <div className="mx-auto max-w-xl text-center">
           <p className="text-[17px] leading-relaxed text-ink/75">{copy.body}</p>
-          <ButtonLink href="/" className="mt-8">
-            חזרה לאתר
-          </ButtonLink>
+
+          {(view === "invalid" || view === "error") && (
+            <p className="mt-3 text-[16px] text-ink/75">
+              <a href={`mailto:${CONTACT_DETAILS.email}`} dir="ltr" className="focus-brand font-semibold text-primary underline">
+                {CONTACT_DETAILS.email}
+              </a>
+            </p>
+          )}
+
+          {(view === "confirm" || view === "error") && c ? (
+            <form method="post" action={`/api/unsubscribe?id=${encodeURIComponent(c)}`} className="mt-8">
+              <Button type="submit" withArrow={false}>
+                {view === "error" ? "לנסות שוב" : "הסירו אותי מרשימת התפוצה"}
+              </Button>
+            </form>
+          ) : (
+            <ButtonLink href="/" className="mt-8">
+              חזרה לאתר
+            </ButtonLink>
+          )}
         </div>
       </Section>
     </PageShell>
