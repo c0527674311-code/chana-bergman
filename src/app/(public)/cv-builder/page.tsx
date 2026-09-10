@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   title: "בונה קורות חיים",
   description:
     "ממלאים פרטים, בוחרים תבנית מעוצבת, ומורידים קורות חיים מקצועיים כ-PDF — בפורמט שמערכות הסינון של חברות ההייטק יודעות לקרוא.",
+  alternates: { canonical: "/cv-builder" },
 };
 
 export default async function CvBuilderPage() {

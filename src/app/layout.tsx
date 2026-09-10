@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Assistant, Poppins } from "next/font/google";
 import { ScrollFx } from "@/components/site/ScrollFx";
+import { SITE_NAME, SITE_URL } from "@/lib/seo";
 import "./globals.css";
 
 const assistant = Assistant({
@@ -18,7 +19,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://chana-bergman.co.il"),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "חנה ברגמן | גיוס והשמה מדויקים בהייטק",
     template: "%s | חנה ברגמן",
@@ -34,13 +35,14 @@ export const metadata: Metadata = {
     "קורות חיים הייטק",
     "משרות הייטק לנשים",
   ],
+  // No og title/description here on purpose: Next fills them from each
+  // page's own title and description. A fixed og:title made every shared
+  // link — a job, an article — preview as the homepage. (A page that sets
+  // its own openGraph replaces this whole object, so it repeats these.)
   openGraph: {
     type: "website",
     locale: "he_IL",
-    siteName: "חנה ברגמן",
-    title: "חנה ברגמן | גיוס והשמה מדויקים בהייטק",
-    description:
-      "מאגר מתכנתות מהמובילות בארץ והתאמה מדויקת לדרישות שלכם. בדיוק מה שחיפשת.",
+    siteName: SITE_NAME,
   },
   robots: { index: true, follow: true },
 };

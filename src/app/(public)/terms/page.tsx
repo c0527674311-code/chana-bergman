@@ -5,7 +5,11 @@ import { Markdown } from "@/components/site/Markdown";
 import { BRAND, CONTACT_DETAILS } from "@/lib/content/site";
 import { getCurrentUser } from "@/lib/supabase/server";
 
-export const metadata: Metadata = { title: "תנאי שימוש", robots: { index: true, follow: false } };
+export const metadata: Metadata = {
+  title: "תנאי שימוש",
+  robots: { index: true, follow: false },
+  alternates: { canonical: "/terms" },
+};
 
 const TERMS = `## כללי
 

@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/supabase/server";
 export const metadata: Metadata = {
   title: "מדיניות פרטיות",
   robots: { index: true, follow: false },
+  alternates: { canonical: "/privacy" },
 };
 
 /**
