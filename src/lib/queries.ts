@@ -32,13 +32,33 @@ export type CandidateList = { candidates: Candidate[]; failed: boolean };
  */
 export async function listCandidates(
   filters: CandidateFilters = {},
-  limit = 500,
+  limit = 2000,
 ): Promise<CandidateList> {
   if (!supabaseConfigured) {
     return { candidates: filterInMemory(DEMO_CANDIDATES, filters).slice(0, limit), failed: false };
   }
 
   const supabase = await createClient();
+  // PostgREST caps a single response (1000 rows by default), so more than that
+  // is read page by page — otherwise the pool silently stops growing at 1000.
+  const PAGE = 1000;
+  const all: Candidate[] = [];
+
+  for (let from = 0; from < limit; from += PAGE) {
+    const { rows, failed } = await fetchPage(supabase, filters, from, Math.min(from + PAGE, limit) - 1);
+    if (failed) return { candidates: [], failed: true };
+    all.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return { candidates: all, failed: false };
+}
+
+async function fetchPage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  filters: CandidateFilters,
+  from: number,
+  to: number,
+): Promise<{ rows: Candidate[]; failed: boolean }> {
   let query = supabase.from("candidates").select("*").is("deleted_at", null);
 
   if (filters.status) query = query.eq("status", filters.status);
@@ -56,14 +76,14 @@ export async function listCandidates(
 
   const { data, error } = await query
     .order("updated_at", { ascending: false })
-    .limit(limit)
+    .range(from, to)
     .returns<Candidate[]>();
 
   if (error) {
     console.error("listCandidates failed:", error);
-    return { candidates: [], failed: true };
+    return { rows: [], failed: true };
   }
-  return { candidates: data ?? [], failed: false };
+  return { rows: data ?? [], failed: false };
 }
 
 function filterInMemory(rows: Candidate[], f: CandidateFilters): Candidate[] {

@@ -172,6 +172,13 @@ function blankTerm(haystack: string, needle: string): string {
 export type ExtractedRequirement = {
   technologies: string[];
   programmingLanguages: string[];
+  /**
+   * Words from the requirement we have no vocabulary for. They are searched
+   * for inside the CVs, so a technology missing from our lists still finds the
+   * candidates who wrote it — finding one is a bonus, missing one costs
+   * nothing, because the word may be an ordinary word in the sentence.
+   */
+  unknownTerms: string[];
   seniority: string | null;
   /** Every region the requirement names — "בשרון או במרכז" is both. */
   regions: string[];
@@ -290,7 +297,53 @@ export function extractRequirement(text: string): ExtractedRequirement {
 
   const minYears = extractMinYears(text);
 
-  return { technologies, programmingLanguages, seniority, regions, minYears };
+  return {
+    technologies,
+    programmingLanguages,
+    unknownTerms: technologies.length || programmingLanguages.length ? [] : unknownTerms(unconsumed),
+    seniority,
+    regions,
+    minYears,
+  };
+}
+
+/**
+ * Ordinary words of a Hebrew or English job description. Anything left after
+ * these is a candidate for "a technology we have never heard of".
+ */
+const STOPWORDS = new Set(
+  `דרוש דרושה דרושים דרושות מפתח מפתחת מפתחים מפתחות מתכנת מתכנתת עבור חברה חברת משרה משרת
+   מלאה חלקית ניסיון שנות שנים שנה לפחות מעל יתרון חובה ידע הכרות היכרות עבודה עובדת צוות
+   בצוות סביבת סביבה תחום בתחום אזור באזור מרחוק היברידי משרדי בעלת יכולת ראש יסודיות אנגלית
+   עברית תואר הנדסאית הנדסאי בוגרת בוגר קורס לימודים תפקיד התפקיד כולל וכן וגם עם על של את
+   אנחנו אנו מחפשים מחפשות למשרה למשרד לחברה גדולה מובילה צומחת בתל אביב ירושלים מרכז
+   required requirement requirements experience years year developer development engineer team
+   lead senior junior full stack fullstack backend frontend back front end web software company
+   position role job knowledge strong good excellent must have with and the for our you your
+   work working remote hybrid office advantage plus min minimum maximum degree student graduate`
+    .split(/\s+/)
+    .filter(Boolean),
+);
+
+const HEBREW_PREFIX = /^[ובלכמהש]{1,2}(?=[֐-׿]{3,})/;
+
+function unknownTerms(text: string): string[] {
+  const words = text.split(/[\s,.;:()[\]{}"'`|/\\]+/).filter(Boolean);
+  // A couple of words is a name or a phone number, not a job description.
+  if (words.length < 3) return [];
+
+  const out: string[] = [];
+  for (const word of words) {
+    const token = word.replace(/^[-+]+|[-+]+$/g, "");
+    if (!token || STOPWORDS.has(token)) continue;
+    if (/^\d+$/.test(token)) continue;
+    if (token.length < 3 && !/[#+]/.test(token)) continue;
+    for (const form of [token, token.replace(HEBREW_PREFIX, "")]) {
+      if (form.length >= 3 && !STOPWORDS.has(form) && !out.includes(form)) out.push(form);
+    }
+    if (out.length >= 8) break;
+  }
+  return out;
 }
 
 /** Lower bound of an experience bucket, for comparing against minYears. */
@@ -352,6 +405,9 @@ export function scoreCandidate(
   const missingTechnologies = req.technologies.filter((t) => !matchedTechnologies.includes(t));
   const matchedLangs = req.programmingLanguages.filter(has);
   const missingLangs = req.programmingLanguages.filter((l) => !matchedLangs.includes(l));
+  // Words with no entry in our vocabulary: shown when found, never held
+  // against her when not — a miss may just be an ordinary word.
+  const matchedUnknown = req.unknownTerms.filter(has);
 
   let score = 0;
   let max = 0;
@@ -363,6 +419,11 @@ export function scoreCandidate(
   if (req.programmingLanguages.length) {
     max += WEIGHTS.lang * req.programmingLanguages.length;
     score += WEIGHTS.lang * matchedLangs.length;
+  }
+
+  if (req.unknownTerms.length) {
+    max += WEIGHTS.tech;
+    if (matchedUnknown.length) score += WEIGHTS.tech;
   }
 
   if (req.seniority) {
@@ -396,8 +457,15 @@ export function scoreCandidate(
   return {
     candidate,
     score: pct,
-    reason: buildReason(candidate, matchedLangs, matchedTechnologies, missingLangs.concat(missingTechnologies), req, region),
-    matchedTechnologies: [...matchedLangs, ...matchedTechnologies],
+    reason: buildReason(
+      candidate,
+      matchedLangs,
+      [...matchedTechnologies, ...matchedUnknown],
+      missingLangs.concat(missingTechnologies),
+      req,
+      region,
+    ),
+    matchedTechnologies: [...matchedLangs, ...matchedTechnologies, ...matchedUnknown],
     missingTechnologies: [...missingLangs, ...missingTechnologies],
   };
 }
@@ -443,6 +511,8 @@ function buildReason(
  */
 function isRelevant(result: MatchResult, req: ExtractedRequirement): boolean {
   const asked = req.programmingLanguages.length + req.technologies.length;
+  // Only unknown words to go on: she must actually have one of them.
+  if (!asked && req.unknownTerms.length) return result.matchedTechnologies.length > 0;
   if (!asked) return result.score >= 60;
   const hits = result.matchedTechnologies.length;
   if (!hits) return false;
@@ -454,6 +524,7 @@ function hasSignals(req: ExtractedRequirement): boolean {
   return Boolean(
     req.technologies.length ||
       req.programmingLanguages.length ||
+      req.unknownTerms.length ||
       req.regions.length ||
       req.seniority ||
       req.minYears != null,

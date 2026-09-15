@@ -64,6 +64,21 @@ export function CandidateTable({ candidates }: { candidates: Row[] }) {
 
   return (
     <>
+      {/* Ticking fifty boxes by hand is not a workflow. One click takes
+          everything the filters left on screen. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setSelected(allSelected ? new Set() : new Set(candidates.map((c) => c.id)))}
+          className="focus-brand rounded-full border border-ink/15 bg-white px-4 py-2 text-[14px] font-semibold hover:bg-canvas"
+        >
+          {allSelected ? "ביטול הבחירה" : `סימון כל ${candidates.length} התוצאות`}
+        </button>
+        {selected.size > 0 && !allSelected && (
+          <span className="text-[14px] text-ink/60">נבחרו {selected.size}</span>
+        )}
+      </div>
+
       {selected.size > 0 && (
         <div className="sticky top-3 z-20 mb-3 flex flex-wrap items-center justify-between gap-3 rounded-full bg-navy px-5 py-3 text-white shadow-[var(--shadow-card)]">
           <p className="text-[15px]">

@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { detectFormat, extractText, UnreadableFileError } from "@/lib/cv-text";
+import { EXTRA_PROGRAMMING_LANGUAGES, EXTRA_TECHNOLOGIES } from "@/lib/data/tech-terms";
 import {
   CITIES,
   EXPERIENCE_YEARS,
@@ -60,8 +61,16 @@ const SCHEMA = {
     phone: { type: ["string", "null"] },
     city: { anyOf: [{ type: "string", enum: [...CITIES] }, { type: "null" }] },
     preferred_region: { anyOf: [{ type: "string", enum: [...REGIONS] }, { type: "null" }] },
-    programming_languages: { type: "array", items: { type: "string", enum: [...PROGRAMMING_LANGUAGES] } },
-    technologies: { type: "array", items: { type: "string", enum: [...TECHNOLOGIES] } },
+    // The extra terms are not offered in the candidate form, but a CV that
+    // names COBOL, Priority or Selenium should still record it.
+    programming_languages: {
+      type: "array",
+      items: { type: "string", enum: [...PROGRAMMING_LANGUAGES, ...EXTRA_PROGRAMMING_LANGUAGES] },
+    },
+    technologies: {
+      type: "array",
+      items: { type: "string", enum: [...TECHNOLOGIES, ...EXTRA_TECHNOLOGIES] },
+    },
     spoken_languages: { type: "array", items: { type: "string", enum: [...SPOKEN_LANGUAGES] } },
     role_types: { type: "array", items: { type: "string" } },
     experience_years: { anyOf: [{ type: "string", enum: [...EXPERIENCE_YEARS] }, { type: "null" }] },

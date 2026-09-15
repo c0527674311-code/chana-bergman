@@ -43,7 +43,8 @@ export type MatchResponse = {
  */
 export async function runMatch(
   text: string,
-  limit = 60,
+  // High enough that "select all the matches" really is all of them.
+  limit = 300,
 ): Promise<MatchResponse | { error: string }> {
   const { candidates, failed } = await listCandidates({}, 5000);
   // A failed load used to rank an empty list and report "no candidates match",

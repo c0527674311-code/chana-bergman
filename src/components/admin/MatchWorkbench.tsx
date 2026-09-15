@@ -126,6 +126,17 @@ export function MatchWorkbench({
                 {t}
               </span>
             ))}
+            {/* Words we have no vocabulary for — searched inside the CVs. */}
+            {extracted.unknownTerms.map((t) => (
+              <span
+                key={t}
+                dir="auto"
+                className="rounded-full bg-white/70 px-3.5 py-1.5 text-[13px] font-semibold text-navy/80 ring-1 ring-navy/10"
+                title="מונח שלא מוכר לנו — חיפשנו אותו בתוך קורות החיים"
+              >
+                {t}
+              </span>
+            ))}
             {extracted.seniority && <Chip>{extracted.seniority}</Chip>}
             {extracted.regions.length > 0 && <Chip>אזור {extracted.regions.join(" / ")}</Chip>}
             {extracted.minYears != null && <Chip>מינימום {yearsLabel(extracted.minYears)}</Chip>}
@@ -176,7 +187,7 @@ export function MatchWorkbench({
                 onClick={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))}
                 className="focus-brand rounded-full border border-ink/15 px-4 py-2 text-[14px] font-semibold hover:bg-canvas"
               >
-                {allSelected ? "בטלי בחירה" : "סמני הכל"}
+                {allSelected ? "ביטול הבחירה" : `סימון כל ${rows.length} המועמדות`}
               </button>
               <button
                 type="button"
