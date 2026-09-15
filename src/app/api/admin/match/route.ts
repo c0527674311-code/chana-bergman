@@ -13,11 +13,15 @@ export async function POST(request: Request) {
     limit?: number;
   };
 
-  if (!text || text.trim().length < 3) {
-    return NextResponse.json({ error: "נא להדביק את טקסט הדרישה." }, { status: 400 });
+  // Two characters is a real search: "C#", "QA", "VB".
+  if (!text || text.trim().length < 2) {
+    return NextResponse.json(
+      { error: "נא להקליד לפחות שני תווים — טקסט דרישה, שם, טלפון או טכנולוגיה." },
+      { status: 400 },
+    );
   }
 
-  const outcome = await runMatch(text, limit ?? 60);
+  const outcome = await runMatch(text, limit ?? 300);
   if ("error" in outcome) return NextResponse.json({ error: outcome.error }, { status: 500 });
   return NextResponse.json(outcome);
 }
