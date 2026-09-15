@@ -64,6 +64,9 @@ const TEMPLATES = [
   },
 ];
 
+/** A template Chana saved — every campaign she sends is kept as one. */
+type SavedTemplate = { id: string; name: string; subject: string; body: string };
+
 /**
  * Identifies this send to the server. Generated once per opened dialog, so a
  * double click or a retry after a lost response finds the campaign that was
@@ -94,6 +97,8 @@ export function CampaignDialog({
   const [result, setResult] = useState<CampaignResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [clientKey] = useState(newClientKey);
+  const [saved, setSaved] = useState<SavedTemplate[]>([]);
+  const [savedNote, setSavedNote] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const inFlight = useRef(false);
   const sending = state === "sending";
@@ -101,6 +106,45 @@ export function CampaignDialog({
   useEffect(() => {
     closeRef.current?.focus();
   }, []);
+
+  // Mails she already sent, ready to reuse.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/email-templates")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (!cancelled && Array.isArray(json?.templates)) setSaved(json.templates);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Keeps this mail for next time. Sending saves it automatically. */
+  async function saveTemplate(name: string, opts: { silent?: boolean } = {}) {
+    const clean = name.trim().slice(0, 120);
+    if (!clean || !subject.trim() || !body.trim()) return;
+    try {
+      const res = await fetch("/api/admin/email-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: clean, subject, body }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? "השמירה נכשלה.");
+      setSaved((prev) => [json.template, ...prev.filter((t) => t.id !== json.template.id)]);
+      setSavedNote(opts.silent ? `המייל נשמר כתבנית בשם ״${clean}״.` : `נשמר כתבנית ״${clean}״.`);
+    } catch (err) {
+      if (!opts.silent) setSavedNote(err instanceof Error ? err.message : "השמירה נכשלה.");
+    }
+  }
+
+  async function removeTemplate(t: SavedTemplate) {
+    if (!window.confirm(`למחוק את התבנית ״${t.name}״?`)) return;
+    const res = await fetch(`/api/admin/email-templates?id=${t.id}`, { method: "DELETE" });
+    if (res.ok) setSaved((prev) => prev.filter((x) => x.id !== t.id));
+  }
 
   // While sending, nothing closes the dialog: closing used to leave the send
   // button one click away from mailing the same people again.
@@ -155,6 +199,10 @@ export function CampaignDialog({
         warning: json.warning,
       });
       setState("sent");
+      // What she actually sent is the best template for next time.
+      if (Number(json.sent ?? 0) > 0 && !json.duplicate) {
+        void saveTemplate(subject, { silent: true });
+      }
     } catch (err) {
       setState("idle");
       setError(err instanceof Error ? err.message : "אירעה שגיאה.");
@@ -247,7 +295,42 @@ export function CampaignDialog({
         ) : (
           <>
             <fieldset disabled={sending} className="contents">
-              <div className="mt-5 flex flex-wrap gap-2">
+              {saved.length > 0 && (
+                <div className="mt-5">
+                  <p className="text-[13px] font-bold text-navy">המיילים שלי</p>
+                  <div className="mt-1.5 flex flex-wrap gap-2">
+                    {saved.map((t) => (
+                      <span
+                        key={t.id}
+                        className="flex items-center gap-1 rounded-full bg-primary-50 ps-1 pe-3.5 text-[13px] font-semibold text-primary-700 ring-1 ring-primary/20"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => removeTemplate(t)}
+                          aria-label={`מחיקת התבנית ${t.name}`}
+                          className="focus-brand grid h-6 w-6 place-items-center rounded-full text-primary/60 hover:bg-white hover:text-primary"
+                        >
+                          ×
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSubject(t.subject);
+                            setBody(t.body);
+                            setSavedNote(null);
+                          }}
+                          className="focus-brand rounded-full py-1.5"
+                        >
+                          {t.name}
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <p className="mt-5 text-[13px] font-bold text-navy">נוסחים מוכנים</p>
+              <div className="mt-1.5 flex flex-wrap gap-2">
                 {TEMPLATES.map((t) => (
                   <button
                     key={t.name}
@@ -255,6 +338,7 @@ export function CampaignDialog({
                     onClick={() => {
                       setSubject(t.subject);
                       setBody(t.body);
+                      setSavedNote(null);
                     }}
                     className="focus-brand rounded-full border border-ink/15 px-3.5 py-1.5 text-[13px] font-semibold hover:bg-canvas"
                   >
@@ -320,7 +404,24 @@ export function CampaignDialog({
               </p>
             )}
 
-            <div className="mt-5 flex justify-end gap-3">
+            {savedNote && (
+              <p role="status" className="mt-4 text-[14px] font-semibold text-primary">
+                {savedNote}
+              </p>
+            )}
+
+            <div className="mt-5 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                disabled={sending || !subject.trim() || !body.trim()}
+                onClick={() => {
+                  const name = window.prompt("שם לתבנית:", subject.trim().slice(0, 120));
+                  if (name) void saveTemplate(name);
+                }}
+                className="focus-brand me-auto rounded-full border border-ink/15 px-4 py-2.5 text-[14px] font-semibold hover:bg-canvas disabled:opacity-40"
+              >
+                שמירה כתבנית
+              </button>
               <button
                 type="button"
                 onClick={onClose}
