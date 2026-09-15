@@ -55,7 +55,9 @@ export function BulkImport() {
   }
 
   function pick(input: HTMLInputElement) {
-    const list = input.files;
+    // Copy first: `input.files` is live, and clearing the input below empties
+    // it — which turned every pick into "no files were chosen".
+    const all = Array.from(input.files ?? []);
     // Let the same folder be chosen again later (the browser only allows one
     // folder per click, so several folders means several clicks).
     input.value = "";
@@ -63,12 +65,11 @@ export function BulkImport() {
     // The folder picker came back with nothing at all — the browser either does
     // not support picking a directory, or she cancelled. Either way, saying
     // nothing leaves her clicking a dead button. Whatever was already chosen stays.
-    if (!list?.length) {
+    if (!all.length) {
       setProblem("לא נבחרו קבצים. אם בחרת תיקייה ולא קרה כלום, נסי בדפדפן Chrome.");
       return;
     }
-
-    const all = Array.from(list);
+    const list = all;
     const named = (f: File) => relativePath(f) || f.name;
     const junk = all.filter((f) => JUNK.test(named(f)));
     const unsupported = all.filter((f) => !JUNK.test(named(f)) && UNSUPPORTED.test(f.name));

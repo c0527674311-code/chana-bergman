@@ -3,6 +3,7 @@ import {
   PROGRAMMING_LANGUAGES,
   REGIONS,
   SENIORITY,
+  SPOKEN_LANGUAGES,
   TECHNOLOGIES,
 } from "@/lib/data/options";
 import { EXTRA_TECHNOLOGIES, EXTRA_TERMS } from "@/lib/data/tech-terms";
@@ -179,6 +180,10 @@ export type ExtractedRequirement = {
    * nothing, because the word may be an ordinary word in the sentence.
    */
   unknownTerms: string[];
+  /** Spoken languages the requirement asks for ("דוברת אנגלית"). */
+  spokenLanguages: string[];
+  /** Those of them it wants at native level ("אנגלית שפת אם"). */
+  nativeLanguages: string[];
   seniority: string | null;
   /** Every region the requirement names — "בשרון או במרכז" is both. */
   regions: string[];
@@ -297,10 +302,20 @@ export function extractRequirement(text: string): ExtractedRequirement {
 
   const minYears = extractMinYears(text);
 
+  // "דוברת אנגלית שפת אם" is a requirement like any other, and nothing looked
+  // at spoken languages at all — the search came back empty.
+  const spokenLanguages = SPOKEN_LANGUAGES.filter((l) => spokenNames(l).some((n) => mentions(h, n)));
+  const nativeLanguages = spokenLanguages.filter((l) => nativeMention(h, l));
+
   return {
     technologies,
     programmingLanguages,
-    unknownTerms: technologies.length || programmingLanguages.length ? [] : unknownTerms(unconsumed),
+    spokenLanguages,
+    nativeLanguages,
+    unknownTerms:
+      technologies.length || programmingLanguages.length || spokenLanguages.length
+        ? []
+        : unknownTerms(unconsumed),
     seniority,
     regions,
     minYears,
@@ -326,6 +341,51 @@ const STOPWORDS = new Set(
 );
 
 const HEBREW_PREFIX = /^[ובלכמהש]{1,2}(?=[֐-׿]{3,})/;
+
+/** English names of the spoken languages, as CVs and requirements write them. */
+const SPOKEN_ALIASES: Record<string, string[]> = {
+  עברית: ["hebrew"],
+  אנגלית: ["english"],
+  רוסית: ["russian"],
+  צרפתית: ["french"],
+  ספרדית: ["spanish"],
+  ערבית: ["arabic"],
+  יידיש: ["yiddish"],
+  אמהרית: ["amharic"],
+  גרמנית: ["german"],
+  פורטוגזית: ["portuguese"],
+};
+
+function spokenNames(language: string): string[] {
+  return [language, ...(SPOKEN_ALIASES[language] ?? [])];
+}
+
+/**
+ * "אנגלית שפת אם", "native English" — the language and the level next to each
+ * other. The gap deliberately excludes commas: almost every Hebrew CV reads
+ * "עברית שפת אם, אנגלית ברמה טובה", and a loose window read that as native
+ * English for nearly everyone in the pool.
+ */
+const GAP = "[ \\t\\-–—:()\\[\\]\"'|]{0,6}";
+
+/** Marks a language matched at the level the requirement asked for. */
+const NATIVE_SUFFIX = " — שפת אם";
+
+function nativeMention(text: string, language: string): boolean {
+  const patterns: string[] = [];
+  for (const name of spokenNames(language)) {
+    const n = norm(name);
+    patterns.push(
+      `${n}${GAP}(?:ב?רמת${GAP})?שפת${GAP}אם`,
+      `שפת${GAP}אם${GAP}ב?${n}`,
+      `native${GAP}(?:level${GAP})?${n}`,
+      `${n}${GAP}native`,
+      `mother${GAP}tongue${GAP}${n}`,
+      `${n}${GAP}mother${GAP}tongue`,
+    );
+  }
+  return patterns.some((p) => new RegExp(p, "i").test(text));
+}
 
 function unknownTerms(text: string): string[] {
   const words = text.split(/[\s,.;:()[\]{}"'`|/\\]+/).filter(Boolean);
@@ -356,7 +416,7 @@ function bucketFloor(bucket: string | null): number {
   return m ? Number(m[1]) : 0;
 }
 
-const WEIGHTS = { tech: 5, lang: 6, seniority: 3, region: 2, years: 3, freshness: 1 };
+const WEIGHTS = { tech: 5, lang: 6, spoken: 4, seniority: 3, region: 2, years: 3, freshness: 1 };
 
 /**
  * Every spelling that means the same skill, so a CV written as "ריאקט",
@@ -426,6 +486,29 @@ export function scoreCandidate(
     if (matchedUnknown.length) score += WEIGHTS.tech;
   }
 
+  // Spoken languages. "שפת אם" is a level the fields don't hold, so it is read
+  // from the CV text; knowing the language without that level is half a point.
+  const spokenList = new Set((candidate.spoken_languages ?? []).map(norm));
+  const matchedSpoken: string[] = [];
+  for (const language of req.spokenLanguages) {
+    max += WEIGHTS.spoken;
+    const knows =
+      spokenList.has(norm(language)) || spokenNames(language).some((n) => mentions(cvText, n));
+    const native = nativeMention(cvText, language);
+    if (req.nativeLanguages.includes(language)) {
+      if (native) {
+        score += WEIGHTS.spoken;
+        matchedSpoken.push(`${language}${NATIVE_SUFFIX}`);
+      } else if (knows) {
+        score += WEIGHTS.spoken / 2;
+        matchedSpoken.push(language);
+      }
+    } else if (knows) {
+      score += WEIGHTS.spoken;
+      matchedSpoken.push(language);
+    }
+  }
+
   if (req.seniority) {
     max += WEIGHTS.seniority;
     if (candidate.seniority === req.seniority) score += WEIGHTS.seniority;
@@ -460,12 +543,12 @@ export function scoreCandidate(
     reason: buildReason(
       candidate,
       matchedLangs,
-      [...matchedTechnologies, ...matchedUnknown],
+      [...matchedTechnologies, ...matchedUnknown, ...matchedSpoken],
       missingLangs.concat(missingTechnologies),
       req,
       region,
     ),
-    matchedTechnologies: [...matchedLangs, ...matchedTechnologies, ...matchedUnknown],
+    matchedTechnologies: [...matchedLangs, ...matchedTechnologies, ...matchedUnknown, ...matchedSpoken],
     missingTechnologies: [...missingLangs, ...missingTechnologies],
   };
 }
@@ -511,8 +594,15 @@ function buildReason(
  */
 function isRelevant(result: MatchResult, req: ExtractedRequirement): boolean {
   const asked = req.programmingLanguages.length + req.technologies.length;
-  // Only unknown words to go on: she must actually have one of them.
-  if (!asked && req.unknownTerms.length) return result.matchedTechnologies.length > 0;
+  // "אנגלית שפת אם" asks for the level, not just the language: knowing English
+  // is a near miss, not a match.
+  if (!asked && req.nativeLanguages.length) {
+    return result.matchedTechnologies.some((t) => t.endsWith(NATIVE_SUFFIX));
+  }
+  // Only unknown words or a spoken language to go on: she must have one.
+  if (!asked && (req.unknownTerms.length || req.spokenLanguages.length)) {
+    return result.matchedTechnologies.length > 0;
+  }
   if (!asked) return result.score >= 60;
   const hits = result.matchedTechnologies.length;
   if (!hits) return false;
@@ -525,6 +615,7 @@ function hasSignals(req: ExtractedRequirement): boolean {
     req.technologies.length ||
       req.programmingLanguages.length ||
       req.unknownTerms.length ||
+      req.spokenLanguages.length ||
       req.regions.length ||
       req.seniority ||
       req.minYears != null,

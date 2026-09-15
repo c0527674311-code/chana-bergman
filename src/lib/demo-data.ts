@@ -42,6 +42,7 @@ function c(
     notes_from_candidate: notes,
     notes_internal: null,
     contact_before_sending: i % 5 === 0,
+    diversitech_practicum: i % 4 === 0,
     status: i % 11 === 0 ? "placed" : "active",
     source: i % 3 === 0 ? "import_disk" : i % 3 === 1 ? "site" : "import_csv",
     tags: cohort >= 2024 ? ["פרקטיקום"] : [],

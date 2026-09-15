@@ -14,6 +14,8 @@ export type MatchRow = {
   institution: string | null;
   cohort: number | null;
   status: string;
+  /** Graduate of the DiversiTech practicum. */
+  practicum: boolean;
   mailable: boolean;
   unsubscribed: boolean;
   score: number;
@@ -70,6 +72,7 @@ export async function runMatch(
       institution: r.candidate.institution,
       cohort: r.candidate.cohort_year,
       status: r.candidate.status,
+      practicum: Boolean(r.candidate.diversitech_practicum),
       mailable: Boolean(r.candidate.email && r.candidate.consent_marketing && !r.candidate.unsubscribed_at),
       unsubscribed: Boolean(r.candidate.unsubscribed_at),
       score: r.score,

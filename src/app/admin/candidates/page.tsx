@@ -22,6 +22,7 @@ export default async function CandidatesPage({
     institution: params.institution,
     cohort: params.cohort,
     status: params.status,
+    practicum: params.practicum,
   };
 
   const { candidates, failed } = await listCandidates(filters);
@@ -57,6 +58,7 @@ export default async function CandidatesPage({
               stack: [...c.programming_languages, ...c.technologies],
               status: c.status,
               updatedAt: c.updated_at,
+              practicum: c.diversitech_practicum,
               mailable: Boolean(c.email && c.consent_marketing && !c.unsubscribed_at),
               unsubscribed: Boolean(c.unsubscribed_at),
             }))}

@@ -28,6 +28,8 @@ export type Candidate = {
   notes_from_candidate: string | null;
   notes_internal: string | null;
   contact_before_sending: boolean;
+  /** Graduate of the DiversiTech practicum. */
+  diversitech_practicum: boolean;
   status: CandidateStatus;
   source: CandidateSource;
   tags: string[];

@@ -22,6 +22,11 @@ const SELECTS: Array<{ key: keyof Filters; label: string; options: readonly (str
   { key: "institution", label: "מוסד", options: INSTITUTIONS },
   { key: "cohort", label: "שנתון", options: cohortYears().map(String) },
   { key: "status", label: "סטטוס", options: CANDIDATE_STATUS.map((s) => ({ value: s.value, label: s.label })) },
+  {
+    key: "practicum",
+    label: "פרקטיקום DiversiTech",
+    options: [{ value: "yes", label: "בוגרות הפרקטיקום בלבד" }],
+  },
 ];
 
 export function CandidateFilters({ current }: { current: Filters }) {

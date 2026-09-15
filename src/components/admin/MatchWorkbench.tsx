@@ -137,6 +137,11 @@ export function MatchWorkbench({
                 {t}
               </span>
             ))}
+            {extracted.spokenLanguages.map((l) => (
+              <Chip key={l}>
+                {extracted.nativeLanguages.includes(l) ? `${l} — שפת אם` : `דוברת ${l}`}
+              </Chip>
+            ))}
             {extracted.seniority && <Chip>{extracted.seniority}</Chip>}
             {extracted.regions.length > 0 && <Chip>אזור {extracted.regions.join(" / ")}</Chip>}
             {extracted.minYears != null && <Chip>מינימום {yearsLabel(extracted.minYears)}</Chip>}
@@ -254,6 +259,11 @@ export function MatchWorkbench({
                         {mailBlockReason(r) && (
                           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[12px] font-semibold text-amber-800">
                             {mailBlockReason(r)}
+                          </span>
+                        )}
+                        {r.practicum && (
+                          <span className="rounded-full bg-mint-100 px-2 py-0.5 text-[12px] font-semibold text-navy">
+                            פרקטיקום DiversiTech
                           </span>
                         )}
                         {r.status === "placed" && (

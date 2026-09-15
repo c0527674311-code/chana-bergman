@@ -23,6 +23,8 @@ export type Row = {
   updatedAt: string;
   mailable: boolean;
   unsubscribed: boolean;
+  /** Graduate of the DiversiTech practicum. */
+  practicum: boolean;
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -162,6 +164,11 @@ export function CandidateTable({ candidates }: { candidates: Row[] }) {
                   ) : (
                     <span className="block text-[12.5px] text-ink/55" dir="ltr">
                       {c.phone ?? "—"}
+                    </span>
+                  )}
+                  {c.practicum && (
+                    <span className="mt-1 me-1 inline-block rounded-full bg-mint-100 px-2 py-0.5 text-[11px] font-semibold text-navy">
+                      פרקטיקום DiversiTech
                     </span>
                   )}
                   {mailBlockReason(c) && (

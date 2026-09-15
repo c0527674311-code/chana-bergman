@@ -130,6 +130,7 @@ export async function POST(request: Request) {
     experience_years: String(form.get("experience_years") ?? "").trim() || null,
     notes_from_candidate: String(form.get("notes_from_candidate") ?? "").trim() || null,
     contact_before_sending: form.get("contact_before_sending") === "yes",
+    diversitech_practicum: form.get("diversitech_practicum") != null,
   };
 
   if (!adminConfigured()) {
@@ -337,6 +338,7 @@ type Fields = {
   experience_years: string | null;
   notes_from_candidate: string | null;
   contact_before_sending: boolean;
+  diversitech_practicum: boolean;
 };
 
 /** Her record: linked to her account, or — the first time — the one with her verified address. */
@@ -384,7 +386,7 @@ async function addToExisting(admin: SupabaseClient, candidateId: string, fields:
   const { data: existing, error } = await admin
     .from("candidates")
     .select(
-      "first_name, last_name, email, phone, city, experience_years, notes_from_candidate, contact_before_sending, preferred_regions, spoken_languages, programming_languages, technologies",
+      "first_name, last_name, email, phone, city, experience_years, notes_from_candidate, contact_before_sending, diversitech_practicum, preferred_regions, spoken_languages, programming_languages, technologies",
     )
     .eq("id", candidateId)
     .single();
@@ -409,6 +411,9 @@ async function addToExisting(admin: SupabaseClient, candidateId: string, fields:
   }
   if (fields.contact_before_sending && !existing.contact_before_sending) {
     patch.contact_before_sending = true;
+  }
+  if (fields.diversitech_practicum && !existing.diversitech_practicum) {
+    patch.diversitech_practicum = true;
   }
 
   const { error: upErr } = await admin.from("candidates").update(patch).eq("id", candidateId);

@@ -1,6 +1,6 @@
 "use client";
 
-import { Input, MultiSelect, RadioRow, Select, Textarea } from "@/components/ui/Field";
+import { Checkbox, Input, MultiSelect, RadioRow, Select, Textarea } from "@/components/ui/Field";
 import {
   CITIES,
   EXPERIENCE_YEARS,
@@ -96,6 +96,18 @@ export function CandidateProfileFields({
         name="notes_from_candidate"
         rows={4}
         defaultValue={candidate?.notes_from_candidate ?? ""}
+      />
+
+      <Checkbox
+        className="pt-1"
+        name="diversitech_practicum"
+        defaultChecked={Boolean(candidate?.diversitech_practicum)}
+        label={
+          <>
+            אני בוגרת פרקטיקום של{" "}
+            <span className="font-semibold text-navy">DiversiTech</span>
+          </>
+        }
       />
 
       <RadioRow
