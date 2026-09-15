@@ -5,6 +5,7 @@ import {
   SENIORITY,
   TECHNOLOGIES,
 } from "@/lib/data/options";
+import { EXTRA_TECHNOLOGIES, EXTRA_TERMS } from "@/lib/data/tech-terms";
 import type { Candidate, MatchResult } from "@/lib/types";
 
 /**
@@ -256,6 +257,11 @@ export function extractRequirement(text: string): ExtractedRequirement {
   const vocabulary: { needle: string; canonical: string }[] = [
     ...TECHNOLOGIES.map((t) => ({ needle: t, canonical: t })),
     ...PROGRAMMING_LANGUAGES.map((l) => ({ needle: l, canonical: l })),
+    // Stacks the form's dropdowns don't offer, so they exist only in CV text.
+    ...EXTRA_TERMS.flatMap(({ term, aliases }) => [
+      { needle: term, canonical: term },
+      ...(aliases ?? []).map((needle) => ({ needle, canonical: term })),
+    ]),
     ...Object.entries(ALIASES).map(([needle, canonical]) => ({ needle, canonical })),
   ].sort((a, b) => norm(b.needle).length - norm(a.needle).length);
 
@@ -263,7 +269,7 @@ export function extractRequirement(text: string): ExtractedRequirement {
   for (const { needle, canonical } of vocabulary) {
     if (!mentions(unconsumed, needle)) continue;
     unconsumed = blankTerm(unconsumed, needle);
-    if ((TECHNOLOGIES as readonly string[]).includes(canonical)) {
+    if ((TECHNOLOGIES as readonly string[]).includes(canonical) || EXTRA_TECHNOLOGIES.includes(canonical)) {
       if (!technologies.includes(canonical)) technologies.push(canonical);
     } else if (!programmingLanguages.includes(canonical)) {
       programmingLanguages.push(canonical);
@@ -299,6 +305,26 @@ function bucketFloor(bucket: string | null): number {
 
 const WEIGHTS = { tech: 5, lang: 6, seniority: 3, region: 2, years: 3, freshness: 1 };
 
+/**
+ * Every spelling that means the same skill, so a CV written as "ריאקט",
+ * "nodejs" or "as400" still matches the canonical term.
+ */
+const SPELLINGS = (() => {
+  const map = new Map<string, string[]>();
+  const add = (canonical: string, needle: string) => {
+    const list = map.get(canonical) ?? [];
+    if (!list.includes(needle)) list.push(needle);
+    map.set(canonical, list);
+  };
+  for (const [needle, canonical] of Object.entries(ALIASES)) add(canonical, needle);
+  for (const { term, aliases } of EXTRA_TERMS) for (const a of aliases ?? []) add(term, a);
+  return map;
+})();
+
+function spellings(term: string): string[] {
+  return [term, ...(SPELLINGS.get(term) ?? [])];
+}
+
 /** The first required region the candidate is available in, if any. */
 function matchingRegion(c: Candidate, req: ExtractedRequirement): string | null {
   return req.regions.find((r) => (c.preferred_regions ?? []).includes(r) || c.city === r) ?? null;
@@ -312,13 +338,20 @@ export function scoreCandidate(
   candidate: Candidate,
   req: ExtractedRequirement,
 ): MatchResult | null {
-  const candTech = new Set((candidate.technologies ?? []).map(norm));
-  const candLang = new Set((candidate.programming_languages ?? []).map(norm));
+  const skills = new Set(
+    [...(candidate.technologies ?? []), ...(candidate.programming_languages ?? [])].map(norm),
+  );
+  // Her CV text, which search_text carries. The scan can only put values from
+  // the form's lists into the fields, so a COBOL or Priority developer has
+  // nothing in her lists to match — the words are in the CV itself.
+  const cvText = normText(candidate.search_text ?? "");
+  const has = (term: string) =>
+    skills.has(norm(term)) || spellings(term).some((s) => mentions(cvText, s));
 
-  const matchedTechnologies = req.technologies.filter((t) => candTech.has(norm(t)));
-  const missingTechnologies = req.technologies.filter((t) => !candTech.has(norm(t)));
-  const matchedLangs = req.programmingLanguages.filter((l) => candLang.has(norm(l)));
-  const missingLangs = req.programmingLanguages.filter((l) => !candLang.has(norm(l)));
+  const matchedTechnologies = req.technologies.filter(has);
+  const missingTechnologies = req.technologies.filter((t) => !matchedTechnologies.includes(t));
+  const matchedLangs = req.programmingLanguages.filter(has);
+  const missingLangs = req.programmingLanguages.filter((l) => !matchedLangs.includes(l));
 
   let score = 0;
   let max = 0;
@@ -397,19 +430,116 @@ function buildReason(
   return line;
 }
 
-/** Rank the whole database against a pasted requirement. */
+/**
+ * Worth showing, as opposed to merely ranked.
+ *
+ * Every candidate who scored above zero used to come back — with hundreds of
+ * CVs in the pool that is a list of everyone who happens to live in the right
+ * area, and the answer to "who fits this requirement" drowns in it.
+ *
+ * When the requirement names skills, a candidate must actually have one of
+ * them; when it names many, a third of them. When it names none (region,
+ * seniority or experience only), only a high score counts.
+ */
+function isRelevant(result: MatchResult, req: ExtractedRequirement): boolean {
+  const asked = req.programmingLanguages.length + req.technologies.length;
+  if (!asked) return result.score >= 60;
+  const hits = result.matchedTechnologies.length;
+  if (!hits) return false;
+  return asked <= 2 || hits >= Math.ceil(asked / 3);
+}
+
+/** Did the text say anything we can rank against? */
+function hasSignals(req: ExtractedRequirement): boolean {
+  return Boolean(
+    req.technologies.length ||
+      req.programmingLanguages.length ||
+      req.regions.length ||
+      req.seniority ||
+      req.minYears != null,
+  );
+}
+
+/**
+ * A name, a phone number, an ID — Chana types those into the same box as a
+ * requirement, and got "no candidates" because nothing there is a technology.
+ * Anything short enough to be a detail rather than a job description is looked
+ * up as it was typed, across everything we hold about a candidate: her fields
+ * and the text of her CV.
+ */
+function directLookup(candidates: Candidate[], text: string): MatchResult[] {
+  const q = text.trim();
+  if (!q || q.length > 60 || q.includes("\n")) return [];
+  const digits = q.replace(/\D/g, "");
+  const byNumber = digits.length >= 5;
+  const needle = normText(q);
+
+  const hits: MatchResult[] = [];
+  for (const c of candidates) {
+    const identity = normText(
+      [c.first_name, c.last_name, c.email, c.phone].filter(Boolean).join(" "),
+    );
+    const cv = normText(c.search_text ?? "");
+    const inIdentity = byNumber
+      ? identity.replace(/\D/g, "").includes(digits)
+      : identity.includes(needle);
+    const inCv = byNumber ? cv.replace(/\D/g, "").includes(digits) : cv.includes(needle);
+    if (!inIdentity && !inCv) continue;
+    hits.push({
+      candidate: c,
+      score: inIdentity ? 100 : 70,
+      reason: inIdentity
+        ? `נמצאה לפי ${byNumber ? "מספר" : "שם"} במאגר`
+        : "הפרט שחיפשת מופיע בתוך קורות החיים",
+      matchedTechnologies: [],
+      missingTechnologies: [],
+    });
+  }
+  return hits.sort((a, b) => b.score - a.score);
+}
+
+/** Rank the whole database against a pasted requirement, and keep the matches. */
 export function matchCandidates(
   candidates: Candidate[],
   requirementText: string,
   limit = 50,
-): { requirement: ExtractedRequirement; results: MatchResult[] } {
+): {
+  requirement: ExtractedRequirement;
+  results: MatchResult[];
+  /** How many candidates matched, before the display limit. */
+  relevantCount: number;
+  /** True when nobody matched and the nearest few are shown instead. */
+  fallback: boolean;
+  /** True when the text was a detail (name / phone / ID), not a requirement. */
+  lookup: boolean;
+} {
   const requirement = extractRequirement(requirementText);
-  const results = candidates
+
+  // Nothing to rank against: treat what she typed as a detail to look up.
+  if (!hasSignals(requirement)) {
+    const found = directLookup(candidates, requirementText);
+    return {
+      requirement,
+      results: found.slice(0, limit),
+      relevantCount: found.length,
+      fallback: false,
+      lookup: true,
+    };
+  }
+  const ranked = candidates
     .map((c) => scoreCandidate(c, requirement))
     .filter((r): r is MatchResult => r !== null)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
-  return { requirement, results };
+    .sort((a, b) => b.score - a.score);
+
+  const relevant = ranked.filter((r) => isRelevant(r, requirement));
+  const fallback = relevant.length === 0 && ranked.length > 0;
+  return {
+    requirement,
+    results: (fallback ? ranked.slice(0, 5) : relevant).slice(0, limit),
+    relevantCount: relevant.length,
+    fallback,
+    lookup: false,
+  };
 }
 
 export const EXPERIENCE_BUCKETS = EXPERIENCE_YEARS;

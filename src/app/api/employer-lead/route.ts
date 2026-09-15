@@ -19,8 +19,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "בקשה לא תקינה." }, { status: 400 });
   }
 
-  // Bots fill every field; people never see this one.
-  if (String(form.get("company_website") ?? "").trim()) return NextResponse.json({ ok: true });
+  // Bots fill every field; people never see this one. A hit is still saved —
+  // an enquiry is too valuable to drop on a guess, and the browser's autofill
+  // reached the field once — it just doesn't ring Chana's phone with an email.
+  const suspectedSpam = Boolean(String(form.get("company_website") ?? "").trim());
   if (rateLimited(request, "employer-lead", 10, 10 * 60_000)) {
     return NextResponse.json({ error: "יותר מדי פניות בזמן קצר. נסו שוב בעוד כמה דקות." }, { status: 429 });
   }
@@ -88,6 +90,11 @@ export async function POST(request: Request) {
       .from("employer_leads")
       .insert({ ...lead, attachment_path: attachmentPath });
     if (error) throw error;
+
+    if (suspectedSpam) {
+      console.warn("employer lead tripped the spam field, saved without notifying:", email);
+      return NextResponse.json({ ok: true });
+    }
 
     await notifyOwner(
       `פנייה חדשה ממעסיק: ${companyName}`,

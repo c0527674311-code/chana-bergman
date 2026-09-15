@@ -35,6 +35,8 @@ export type Candidate = {
   unsubscribed_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Everything about her as one lowercase string — fields plus the current CV's text. */
+  search_text?: string | null;
 };
 
 export type CvDocument = {

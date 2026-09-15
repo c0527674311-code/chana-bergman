@@ -133,10 +133,14 @@ function RoleLine({
   );
 }
 
+/**
+ * The dates of an entry, in a fixed column on the right — where the eye starts
+ * in Hebrew. They used to sit at the far left end of the line. An entry with no
+ * dates keeps the empty column, so every title still starts at the same place.
+ */
 function Dates({ from, to, className }: { from: string; to: string; className: string }) {
-  if (!from && !to) return null;
   return (
-    <p className={className} dir="ltr">
+    <p className={`w-[26mm] shrink-0 text-right ${className}`} dir="ltr">
       {[from, to].filter(Boolean).join(" – ")}
     </p>
   );
@@ -178,9 +182,11 @@ function SkinSheet({
           <div className="flex flex-col gap-4">
             {experience.map((e, i) => (
               <div key={i} className="cv-keep">
-                <div className="flex items-baseline justify-between gap-4">
-                  <RoleLine main={e.role} sub={e.company} className={t.itemTitle} subClassName={t.itemSub} />
+                <div className="flex items-baseline gap-4">
                   <Dates from={e.from} to={e.to} className={t.dates} />
+                  <div className="min-w-0 flex-1">
+                    <RoleLine main={e.role} sub={e.company} className={t.itemTitle} subClassName={t.itemSub} />
+                  </div>
                 </div>
                 {e.description && <p className={`${t.text} mt-1`}>{e.description}</p>}
               </div>
@@ -203,13 +209,11 @@ function SkinSheet({
           <h2 className={`cv-head ${t.heading}`}>השכלה</h2>
           <div className="flex flex-col gap-2">
             {education.map((e, i) => (
-              <div key={i} className="cv-keep flex items-baseline justify-between gap-4">
-                <RoleLine main={e.degree} sub={e.institution} className={t.itemTitle} subClassName={t.itemSub} />
-                {e.year && (
-                  <p className={t.dates} dir="ltr">
-                    {e.year}
-                  </p>
-                )}
+              <div key={i} className="cv-keep flex items-baseline gap-4">
+                <Dates from={e.year} to="" className={t.dates} />
+                <div className="min-w-0 flex-1">
+                  <RoleLine main={e.degree} sub={e.institution} className={t.itemTitle} subClassName={t.itemSub} />
+                </div>
               </div>
             ))}
           </div>
@@ -359,14 +363,16 @@ function ElegantSheet({ data, print, sample }: SheetProps) {
           <div className="flex flex-col gap-5">
             {experience.map((e, i) => (
               <div key={i} className="cv-keep">
-                <div className="flex items-baseline justify-between gap-4">
-                  <RoleLine
-                    main={e.role}
-                    sub={e.company}
-                    className="text-[14px] font-bold text-[#2b2b33]"
-                    subClassName="font-normal text-[#55555e]"
-                  />
-                  <Dates from={e.from} to={e.to} className="shrink-0 text-[12px] italic text-[#8a6d3b]" />
+                <div className="flex items-baseline gap-4">
+                  <Dates from={e.from} to={e.to} className="text-[12px] italic text-[#8a6d3b]" />
+                  <div className="min-w-0 flex-1">
+                    <RoleLine
+                      main={e.role}
+                      sub={e.company}
+                      className="text-[14px] font-bold text-[#2b2b33]"
+                      subClassName="font-normal text-[#55555e]"
+                    />
+                  </div>
                 </div>
                 {e.description && (
                   <p className="mt-1 text-[13px] text-[#3c3c46]">{e.description}</p>
@@ -395,18 +401,16 @@ function ElegantSheet({ data, print, sample }: SheetProps) {
           <GoldHeading>השכלה</GoldHeading>
           <div className="flex flex-col gap-2">
             {education.map((e, i) => (
-              <div key={i} className="cv-keep flex items-baseline justify-between gap-4">
-                <RoleLine
-                  main={e.degree}
-                  sub={e.institution}
-                  className="text-[13.5px] font-bold text-[#2b2b33]"
-                  subClassName="font-normal text-[#55555e]"
-                />
-                {e.year && (
-                  <p className="shrink-0 text-[12px] italic text-[#8a6d3b]" dir="ltr">
-                    {e.year}
-                  </p>
-                )}
+              <div key={i} className="cv-keep flex items-baseline gap-4">
+                <Dates from={e.year} to="" className="text-[12px] italic text-[#8a6d3b]" />
+                <div className="min-w-0 flex-1">
+                  <RoleLine
+                    main={e.degree}
+                    sub={e.institution}
+                    className="text-[13.5px] font-bold text-[#2b2b33]"
+                    subClassName="font-normal text-[#55555e]"
+                  />
+                </div>
               </div>
             ))}
           </div>
@@ -541,14 +545,16 @@ function RoseSheet({ data, print, sample }: SheetProps) {
               {experience.map((e, i) => (
                 <div key={i} className="cv-keep relative">
                   <span className="absolute -start-[26px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#d87a97]" />
-                  <div className="flex items-baseline justify-between gap-4">
-                    <RoleLine
-                      main={e.role}
-                      sub={e.company}
-                      className="text-[13.5px] font-bold text-[#4a2836]"
-                      subClassName="font-semibold text-[#6e5560]"
-                    />
-                    <Dates from={e.from} to={e.to} className="shrink-0 text-[12px] text-[#a08a93]" />
+                  <div className="flex items-baseline gap-4">
+                    <Dates from={e.from} to={e.to} className="text-[12px] text-[#a08a93]" />
+                    <div className="min-w-0 flex-1">
+                      <RoleLine
+                        main={e.role}
+                        sub={e.company}
+                        className="text-[13.5px] font-bold text-[#4a2836]"
+                        subClassName="font-semibold text-[#6e5560]"
+                      />
+                    </div>
                   </div>
                   {e.description && (
                     <p className="mt-1 text-[13px] text-[#4a3c43]">{e.description}</p>

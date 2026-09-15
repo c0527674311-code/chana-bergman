@@ -77,6 +77,9 @@ function subscribeDraft(listener: () => void) {
 export function CvBuilder() {
   const { data, template } = useSyncExternalStore(subscribeDraft, readDraft, () => BLANK_DRAFT);
   const [checkout, setCheckout] = useState<Checkout | null>(null);
+  const [joinConsent, setJoinConsent] = useState(false);
+  // What was last sent to the pool, so a second download doesn't send it again.
+  const savedRef = useRef("");
   const [payDialog, setPayDialog] = useState<Checkout | null>(null);
   const [scale, setScale] = useState(0.5);
   const [sheetHeight, setSheetHeight] = useState(297 * 3.7795);
@@ -150,7 +153,28 @@ export function CvBuilder() {
     });
   }
 
+  /**
+   * A CV written here is a candidate. It is saved to Chana's pool (the text
+   * goes in as her document, so a search finds every word of it); mailing is
+   * only on if she ticked the box.
+   */
+  async function saveToPool() {
+    const payload = JSON.stringify({ cv: cleanCv(data), consent: joinConsent });
+    if (savedRef.current === payload) return;
+    savedRef.current = payload;
+    try {
+      await fetch("/api/cv-builder/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+      });
+    } catch {
+      // The download matters more than the record; she can always submit.
+    }
+  }
+
   async function download() {
+    void saveToPool();
     let c = checkout;
     if (!c) {
       // Clicked before the config loaded — fetch it now, fall back to free.
@@ -346,6 +370,17 @@ export function CvBuilder() {
         </div>
 
         <div className="flex flex-col items-center gap-2">
+          <label className="mb-1 flex max-w-sm cursor-pointer items-start gap-2.5 rounded-2xl bg-canvas px-4 py-3 text-[13px] leading-relaxed text-ink/75">
+            <input
+              type="checkbox"
+              checked={joinConsent}
+              onChange={(e) => setJoinConsent(e.currentTarget.checked)}
+              className="focus-brand mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-primary)]"
+            />
+            <span>
+              מאשרת שחנה תעדכן אותי במייל על משרות שמתאימות לי.
+            </span>
+          </label>
           <Button size="lg" withArrow={false} onClick={download} disabled={!ready}>
             הורדת קורות החיים כ-PDF
             {checkout?.mode === "paid" && ` · ₪${checkout.price}`}
@@ -361,11 +396,12 @@ export function CvBuilder() {
             </p>
           )}
           <p className="max-w-sm text-center text-[13px] leading-relaxed text-ink/55">
-            רוצה שחנה תמצא לך משרה עם הקובץ הזה?{" "}
+            בהורדה קורות החיים נשמרים גם במאגר המועמדות של חנה, כדי שתוכל להציע לך משרות
+            מתאימות. אפשר גם{" "}
             <Link href="/submit-cv" className="focus-brand rounded font-semibold text-primary hover:underline">
-              שלחי אותו למאגר
-            </Link>{" "}
-            אחרי ההורדה.
+              לצרף קובץ קיים למאגר
+            </Link>
+            .
           </p>
         </div>
       </div>

@@ -56,15 +56,15 @@ export function BulkImport() {
 
   function pick(input: HTMLInputElement) {
     const list = input.files;
+    // Let the same folder be chosen again later (the browser only allows one
+    // folder per click, so several folders means several clicks).
+    input.value = "";
 
     // The folder picker came back with nothing at all — the browser either does
     // not support picking a directory, or she cancelled. Either way, saying
-    // nothing leaves her clicking a dead button.
+    // nothing leaves her clicking a dead button. Whatever was already chosen stays.
     if (!list?.length) {
-      setFiles([]);
-      chosenRef.current = [];
       setProblem("לא נבחרו קבצים. אם בחרת תיקייה ולא קרה כלום, נסי בדפדפן Chrome.");
-      setNotice(null);
       return;
     }
 
@@ -74,12 +74,24 @@ export function BulkImport() {
     const unsupported = all.filter((f) => !JUNK.test(named(f)) && UNSUPPORTED.test(f.name));
     const chosen = all.filter((f) => !JUNK.test(named(f)) && CV_EXT.test(f.name) && f.size > 0);
 
-    chosenRef.current = chosen;
-    setFiles(chosen.map((f) => ({ name: named(f), status: "queued" })));
+    // Each pick adds to the list instead of replacing it: one folder per click,
+    // as many folders as she likes, all imported together.
+    const fileKey = (f: File) => `${named(f)}|${f.size}|${f.lastModified}`;
+    const seen = new Set(chosenRef.current.map(fileKey));
+    const added: File[] = [];
+    for (const f of chosen) {
+      if (seen.has(fileKey(f))) continue;
+      seen.add(fileKey(f));
+      added.push(f);
+    }
+    const repeated = chosen.length - added.length;
+
+    chosenRef.current = [...chosenRef.current, ...added];
+    setFiles((prev) => [...prev, ...added.map((f) => ({ name: named(f), status: "queued" as Status }))]);
     setStopped(null);
-    input.value = "";
 
     const notes = [
+      repeated ? `${repeated} קבצים כבר היו ברשימה.` : "",
       junk.length ? `${junk.length} קבצים זמניים של Word/מערכת ידולגו.` : "",
       unsupported.length
         ? `${unsupported.length} קבצי HEIC (צילומי אייפון) או Pages לא נתמכים — אפשר לשמור אותם כ-JPG או PDF ולהוסיף.`
@@ -109,13 +121,27 @@ export function BulkImport() {
 
     setProblem(null);
     setNotice(
-      [`נבחרו ${list.length} קבצים, מתוכם ${chosen.length} נראים כמו קורות חיים.`, ...notes].join(" "),
+      [
+        `נבחרו ${list.length} קבצים, מתוכם ${added.length} נוספו לרשימה.`,
+        ...notes,
+        `סה״כ ברשימה: ${chosenRef.current.length} קבצים. אפשר להוסיף עוד תיקייה לפני שמתחילים.`,
+      ].join(" "),
     );
+  }
+
+  function clearList() {
+    chosenRef.current = [];
+    setFiles([]);
+    setNotice(null);
+    setProblem(null);
+    setStopped(null);
   }
 
   async function run(only?: number[]) {
     const chosen = chosenRef.current;
-    const queue = only ?? chosen.map((_, i) => i);
+    // Without an explicit list: everything still waiting, so files added after
+    // an earlier run are imported without re-reading what is already in.
+    const queue = only ?? files.flatMap((f, i) => (f.status === "queued" ? [i] : []));
     if (!queue.length) return;
 
     stopRef.current = null;
@@ -231,8 +257,9 @@ export function BulkImport() {
       <section className="rounded-[var(--radius-card)] bg-white p-7 shadow-[0_10px_40px_-30px_rgb(28_28_60_/_0.4)]">
         <h2 className="text-[20px] font-bold text-navy">קורות חיים מהמחשב</h2>
         <p className="mt-2 text-[15px] leading-relaxed text-ink/70">
-          קבצים בודדים או תיקייה שלמה. PDF, Word, טקסט או סריקות. כל קובץ שנקלט נשמר במקור
-          ולא נמחק לעולם. קובץ שכבר יובא בעבר מדולג בלי לשלם עליו שוב.
+          קבצים בודדים או תיקיות שלמות. אפשר לבחור תיקייה, ואז עוד תיקייה — הן מצטברות
+          לרשימה אחת ומיובאות יחד. PDF, Word, טקסט או סריקות. כל קובץ שנקלט נשמר במקור ולא
+          נמחק לעולם. קובץ שכבר יובא בעבר מדולג בלי לשלם עליו שוב.
         </p>
 
         <input
@@ -258,33 +285,45 @@ export function BulkImport() {
             htmlFor="cv-files"
             className="focus-brand cursor-pointer rounded-full border border-ink/20 px-5 py-2.5 text-[15px] font-semibold hover:bg-canvas"
           >
-            בחירת קבצים
+            {files.length ? "הוספת קבצים" : "בחירת קבצים"}
           </label>
           <label
             htmlFor="folder"
             className="focus-brand cursor-pointer rounded-full border border-ink/20 px-5 py-2.5 text-[15px] font-semibold hover:bg-canvas"
           >
-            בחירת תיקייה
+            {files.length ? "הוספת תיקייה" : "בחירת תיקייה"}
           </label>
-          <Button withArrow={false} onClick={() => run()} disabled={running || !files.length || started}>
+          <Button withArrow={false} onClick={() => run()} disabled={running || !pendingIndexes.length}>
             {running
               ? `מייבאת… ${progress}%`
-              : files.length
-                ? `התחלת ייבוא (${files.length})`
+              : pendingIndexes.length
+                ? `התחלת ייבוא (${pendingIndexes.length})`
                 : "התחלת ייבוא"}
           </Button>
+          {!running && files.length > 0 && (
+            <button
+              type="button"
+              onClick={clearList}
+              className="focus-brand rounded-full px-4 py-2.5 text-[15px] font-semibold text-ink/70 hover:bg-canvas"
+            >
+              ניקוי הרשימה
+            </button>
+          )}
         </div>
 
         {/* Files are chosen but nothing has been sent yet. This is the exact
             state Chana sat in: a full list on screen, and no idea a click was
             still required. Say it plainly, right above the list. */}
-        {!running && files.length > 0 && !started && (
+        {!running && pendingIndexes.length > 0 && (
           <p
             role="status"
             className="mt-4 rounded-2xl bg-primary-50 px-4 py-3 text-[14px] font-semibold leading-relaxed text-navy ring-1 ring-primary/20"
           >
-            {files.length} קבצים מוכנים — עדיין לא הועלה כלום. לחצי על{" "}
-            <span className="whitespace-nowrap">״התחלת ייבוא״</span> כדי להתחיל.
+            {started
+              ? `${pendingIndexes.length} קבצים חדשים ברשימה עדיין לא יובאו.`
+              : `${pendingIndexes.length} קבצים מוכנים — עדיין לא הועלה כלום.`}{" "}
+            אפשר להוסיף עוד תיקייה, ואז ללחוץ על{" "}
+            <span className="whitespace-nowrap">״התחלת ייבוא״</span>.
           </p>
         )}
 

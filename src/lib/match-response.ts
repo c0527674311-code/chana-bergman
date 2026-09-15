@@ -24,7 +24,14 @@ export type MatchRow = {
 
 export type MatchResponse = {
   requirement: ExtractedRequirement;
+  /** Candidates in the database. */
   total: number;
+  /** How many of them match the requirement (the list may show fewer). */
+  relevantCount: number;
+  /** True when nobody matched and the nearest few are shown instead. */
+  fallback: boolean;
+  /** True when the text was a detail (name / phone / ID), not a requirement. */
+  lookup: boolean;
   results: MatchRow[];
 };
 
@@ -43,10 +50,13 @@ export async function runMatch(
   // which reads as an answer to give the employer rather than a fault.
   if (failed) return { error: LOAD_ERROR_MESSAGE };
 
-  const { requirement, results } = matchCandidates(candidates, text, limit);
+  const { requirement, results, relevantCount, fallback, lookup } = matchCandidates(candidates, text, limit);
   return {
     requirement,
     total: candidates.length,
+    relevantCount,
+    fallback,
+    lookup,
     results: results.map((r) => ({
       id: r.candidate.id,
       name: [r.candidate.first_name, r.candidate.last_name].filter(Boolean).join(" "),

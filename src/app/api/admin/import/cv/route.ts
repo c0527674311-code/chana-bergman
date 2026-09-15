@@ -114,6 +114,12 @@ export async function POST(request: Request) {
         .single();
       if (error) throw error;
       const patch = mergePatch(existing, fields);
+      // A CV Chana files herself is a candidate who approached her, so she is
+      // mailable — unless she has since removed herself from the list.
+      if (!existing.consent_marketing && !existing.unsubscribed_at && (existing.email || fields.email)) {
+        patch.consent_marketing = true;
+        patch.consent_at = new Date().toISOString();
+      }
       if (Object.keys(patch).length) {
         const { error: upErr } = await admin.from("candidates").update(patch).eq("id", candidateId);
         if (upErr) throw upErr;
@@ -121,7 +127,15 @@ export async function POST(request: Request) {
     } else {
       const { data, error } = await admin
         .from("candidates")
-        .insert({ ...fields, source: "import_disk", status: "active", consent_marketing: false })
+        .insert({
+          ...fields,
+          source: "import_disk",
+          status: "active",
+          // Chana adds these herself from CVs sent to her; consent on the
+          // public form is the candidate's own act and stays required there.
+          consent_marketing: Boolean(fields.email),
+          consent_at: fields.email ? new Date().toISOString() : null,
+        })
         .select("id")
         .single();
       if (error) throw error;

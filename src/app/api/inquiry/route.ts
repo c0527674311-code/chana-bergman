@@ -19,8 +19,10 @@ export async function POST(request: Request) {
   const form = await request.formData().catch(() => null);
   if (!form) return NextResponse.json({ error: "בקשה לא תקינה." }, { status: 400 });
 
-  // Bots fill every field; people never see this one.
-  if (String(form.get("company_website") ?? "").trim()) return NextResponse.json({ ok: true });
+  // Bots fill every field; people never see this one. A hit is saved anyway
+  // (the browser's autofill reached this field once and a real enquiry was
+  // lost) — it just doesn't send Chana an email.
+  const suspectedSpam = Boolean(String(form.get("company_website") ?? "").trim());
   if (rateLimited(request, "inquiry", 10, 10 * 60_000)) {
     return NextResponse.json({ error: "יותר מדי פניות בזמן קצר. נסי שוב בעוד כמה דקות." }, { status: 429 });
   }
@@ -58,6 +60,11 @@ export async function POST(request: Request) {
     const admin = createAdminClient();
     const { error } = await admin.from("employer_leads").insert(record);
     if (error) throw error;
+
+    if (suspectedSpam) {
+      console.warn("inquiry tripped the spam field, saved without notifying:", email);
+      return NextResponse.json({ ok: true });
+    }
 
     await notifyOwner(
       `שאלה חדשה מהאתר: ${record.contact_name}`,

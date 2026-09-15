@@ -30,6 +30,9 @@ export function MatchWorkbench({
   const [rows, setRows] = useState<Row[] | null>(initialResult?.results ?? null);
   const [extracted, setExtracted] = useState<Extracted | null>(initialResult?.requirement ?? null);
   const [total, setTotal] = useState(initialResult?.total ?? 0);
+  const [relevantCount, setRelevantCount] = useState(initialResult?.relevantCount ?? 0);
+  const [fallback, setFallback] = useState(initialResult?.fallback ?? false);
+  const [lookup, setLookup] = useState(initialResult?.lookup ?? false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
@@ -54,6 +57,9 @@ export function MatchWorkbench({
       setRows(json.results);
       setExtracted(json.requirement);
       setTotal(json.total);
+      setRelevantCount(json.relevantCount);
+      setFallback(json.fallback);
+      setLookup(json.lookup);
       setSelected(new Set());
     } catch (err) {
       setError(err instanceof Error ? err.message : "אירעה שגיאה.");
@@ -77,18 +83,19 @@ export function MatchWorkbench({
     <div className="flex flex-col gap-6">
       <section className="rounded-[var(--radius-card)] bg-white p-6 shadow-[0_10px_40px_-30px_rgb(28_28_60_/_0.4)]">
         <label htmlFor="req" className="text-[15px] font-bold text-navy">
-          טקסט הדרישה
+          טקסט הדרישה — או שם, טלפון או ת״ז של מועמדת
         </label>
         <textarea
           id="req"
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={7}
-          placeholder="הדביקי כאן את הדרישה כפי שהתקבלה מהמעסיק…"
+          placeholder="הדביקי כאן את הדרישה כפי שהתקבלה מהמעסיק — או הקלידי שם, טלפון, ת״ז או כל פרט אחר…"
           className="focus-brand mt-2 w-full resize-y rounded-[22px] border border-ink/20 bg-white px-5 py-4 text-[15px] leading-relaxed placeholder:text-ink/45"
         />
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button onClick={run} disabled={busy || text.trim().length < 3} withArrow={false}>
+          {/* Two characters is a real search: "C#", "QA", "VB". */}
+          <Button onClick={run} disabled={busy || text.trim().length < 2} withArrow={false}>
             {busy ? "מחפשת…" : "מצא לי מועמדות"}
           </Button>
           <button
@@ -128,7 +135,9 @@ export function MatchWorkbench({
               !extracted.regions.length &&
               extracted.minYears == null && (
                 <span className="text-[14px] text-ink/70">
-                  לא זוהו דרישות ספציפיות — נסי לכתוב טכנולוגיות מפורשות.
+                  {lookup
+                    ? `חיפוש ישיר במאגר: ״${text.trim()}״ — לפי שם, טלפון, מייל, ת״ז או כל מילה מתוך קורות החיים.`
+                    : "לא זוהו דרישות ספציפיות — נסי לכתוב טכנולוגיות מפורשות."}
                 </span>
               )}
           </div>
@@ -138,13 +147,27 @@ export function MatchWorkbench({
       {rows && (
         <section className="rounded-[var(--radius-card)] bg-white p-6 shadow-[0_10px_40px_-30px_rgb(28_28_60_/_0.4)]">
           <div className="flex flex-wrap items-center justify-between gap-4 pb-4">
+            {/* The whole database used to come back ranked, so a requirement
+                with one technology listed everyone who lives in the right area
+                too. Only real matches are shown now. */}
             <p className="text-[15px] text-ink/70">
-              {/* Every candidate is ranked and returned, so "N מתאימות" used to
-                  report the whole database as matching — it read as "you have 5
-                  candidates for this role" when three of them matched nothing.
-                  Count the ones that actually hit a required skill. */}
-              <strong className="text-navy">{rows.filter((r) => r.matched.length > 0).length}</strong>{" "}
-              מועמדות עם התאמה · {rows.length} מדורגות מתוך {total} במאגר
+              {lookup ? (
+                <>
+                  <strong className="text-navy">{relevantCount}</strong> מועמדות נמצאו בחיפוש מתוך{" "}
+                  {total} במאגר
+                  {relevantCount > rows.length && <> · מוצגות {rows.length}</>}
+                </>
+              ) : fallback ? (
+                <span className="font-semibold text-amber-800">
+                  אף מועמדת לא עונה על הדרישה — אלה {rows.length} הקרובות ביותר מתוך {total} במאגר.
+                </span>
+              ) : (
+                <>
+                  <strong className="text-navy">{relevantCount}</strong> מועמדות מתאימות מתוך{" "}
+                  {total} במאגר
+                  {relevantCount > rows.length && <> · מוצגות {rows.length} המתאימות ביותר</>}
+                </>
+              )}
               {selected.size > 0 && <> · נבחרו {selected.size}</>}
             </p>
             <div className="flex flex-wrap items-center gap-2">
@@ -184,7 +207,9 @@ export function MatchWorkbench({
 
           {rows.length === 0 ? (
             <p className="py-10 text-center text-[15px] text-ink/60">
-              לא נמצאו מועמדות שעונות על הדרישה.
+              {lookup
+                ? "לא נמצאה מועמדת עם הפרט הזה במאגר."
+                : "לא נמצאו מועמדות שעונות על הדרישה."}
             </p>
           ) : (
             <ul className="flex flex-col divide-y divide-ink/8">
