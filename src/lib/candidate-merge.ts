@@ -3,6 +3,19 @@ import { classifyFromPath } from "@/lib/folder-classification";
 import { normalizeEmail } from "@/lib/utils";
 
 /**
+ * The institution to store: a name from the list when the CV clearly names
+ * it, otherwise the name exactly as the CV writes it. "אחר" with the real
+ * name available told Chana nothing — and the scan used to pick the nearest
+ * list entry, which put a Bais Yaakov graduate at מכללת אונו.
+ */
+export function institutionFromParsed(parsed: ParsedCv): string | null {
+  const listed = parsed.institution;
+  const raw = parsed.institution_name?.trim() || null;
+  if (listed && !["אחר", "סמינר אחר"].includes(listed)) return listed;
+  return raw ?? listed ?? null;
+}
+
+/**
  * Candidate fields from a scanned CV, combined with what the folder it came
  * from says.
  *
@@ -29,7 +42,7 @@ export function fieldsFromParsed(parsed: ParsedCv, relativePath: string) {
     role_types: parsed.role_types ?? [],
     experience_years: fromFolder.experienceYears ?? parsed.experience_years ?? null,
     seniority: parsed.seniority ?? null,
-    institution: parsed.institution ?? null,
+    institution: institutionFromParsed(parsed),
     cohort_year: parsed.cohort_year ?? null,
     notes_internal: parsed.summary ?? null,
     // Keep the folder names verbatim too, so a heading we could not map to the

@@ -37,6 +37,8 @@ export type ParsedCv = {
   experience_years: string | null;
   seniority: string | null;
   institution: string | null;
+  /** The institution exactly as the CV writes it, when it is not on the list. */
+  institution_name: string | null;
   cohort_year: number | null;
   summary: string | null;
   /** Model's own confidence, so low-quality scans land in the review queue. */
@@ -76,6 +78,7 @@ const SCHEMA = {
     experience_years: { anyOf: [{ type: "string", enum: [...EXPERIENCE_YEARS] }, { type: "null" }] },
     seniority: { anyOf: [{ type: "string", enum: [...SENIORITY] }, { type: "null" }] },
     institution: { anyOf: [{ type: "string", enum: [...INSTITUTIONS] }, { type: "null" }] },
+    institution_name: { type: ["string", "null"] },
     cohort_year: { type: ["integer", "null"] },
     summary: { type: ["string", "null"] },
     confidence: { type: "string", enum: ["high", "medium", "low"] },
@@ -94,6 +97,7 @@ const SCHEMA = {
     "experience_years",
     "seniority",
     "institution",
+    "institution_name",
     "cohort_year",
     "summary",
     "confidence",
@@ -112,7 +116,12 @@ const SYSTEM = `אתה מחלץ פרטים מקורות חיים של מתכנת
 - מוצרי בסיס נתונים (SQL Server, PostgreSQL, MongoDB) ופריימוורקים (Angular,
   React, Django) שייכים ל-technologies. ב-programming_languages רק שפות ממש.
 - experience_years — חשב מסך שנות הניסיון התעסוקתי בפועל, לא מגיל או משנות לימודים.
-- cohort_year — שנת סיום הלימודים/הקורס אם מצוינת.
+- institution — רק אם שם מוסד מהרשימה כתוב במפורש בקורות החיים ("בית יעקב" → "מכללת בית יעקב",
+  "אונו" → "מכללת אונו", "מכון לב"/JCT → "מכון לב"). אסור לנחש לפי דמיון, לפי עיר המגורים או
+  לפי סוג הלימודים. סמינר שאינו ברשימה → "סמינר אחר". לא כתוב מוסד בכלל → null.
+- institution_name — שם המוסד בדיוק כפי שכתוב בקורות החיים (למשל "סמינר בית יעקב אוהל אברהם"),
+  או null אם לא כתוב.
+- cohort_year — שנת סיום הלימודים/הקורס רק אם היא כתובה במפורש. לא לנחש.
 - summary — שורה אחת בעברית שמתארת את המועמדת (עד 25 מילים).
 - confidence — "low" אם הקובץ מטושטש, חלקי, או שלא הצלחת לקרוא חלקים משמעותיים.`;
 
