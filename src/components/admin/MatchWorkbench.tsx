@@ -6,6 +6,7 @@ import { CampaignDialog } from "@/components/admin/CampaignDialog";
 import { ConsentButton, mailBlockReason } from "@/components/admin/ConsentButton";
 import type { ExtractedRequirement } from "@/lib/matching";
 import type { MatchResponse, MatchRow } from "@/lib/match-response";
+import { SECTION_LABEL } from "@/lib/cv-sections";
 import { cn } from "@/lib/utils";
 
 type Row = MatchRow;
@@ -38,6 +39,8 @@ export function MatchWorkbench({
   const [error, setError] = useState<string | null>(initialError);
   const [campaignOpen, setCampaignOpen] = useState(false);
   const [zipping, setZipping] = useState(false);
+  /** null = follow the requirement; true/false = Chana decided herself. */
+  const [onlyExperience, setOnlyExperience] = useState<boolean | null>(null);
 
   /** One zip with the current CV of every chosen candidate — what goes to the employer. */
   async function downloadCvs(chosen: Row[]) {
@@ -66,9 +69,19 @@ export function MatchWorkbench({
     }
   }
 
+  // "מנוסה ב-Java" brought three hundred candidates, because every graduate
+  // studied Java. Unless Chana says otherwise, a requirement that asks for
+  // experience shows only the CVs where it appears in a job she held.
+  const experienceOnly = onlyExperience ?? extracted?.experienceRequested ?? false;
+  const shownRows = useMemo(
+    () => (experienceOnly ? (rows ?? []).filter((r) => r.experienceMatch) : (rows ?? [])),
+    [rows, experienceOnly],
+  );
+  const studyOnlyCount = (rows?.length ?? 0) - (rows ?? []).filter((r) => r.experienceMatch).length;
+
   const selectedRows = useMemo(
-    () => (rows ?? []).filter((r) => selected.has(r.id)),
-    [rows, selected],
+    () => shownRows.filter((r) => selected.has(r.id)),
+    [shownRows, selected],
   );
 
   async function run() {
@@ -83,6 +96,7 @@ export function MatchWorkbench({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "החיפוש נכשל.");
       setRows(json.results);
+      setOnlyExperience(null);
       setExtracted(json.requirement);
       setTotal(json.total);
       setRelevantCount(json.relevantCount);
@@ -105,7 +119,7 @@ export function MatchWorkbench({
     });
   }
 
-  const allSelected = rows != null && rows.length > 0 && selected.size === rows.length;
+  const allSelected = shownRows.length > 0 && selected.size === shownRows.length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -207,20 +221,38 @@ export function MatchWorkbench({
                 </span>
               ) : (
                 <>
-                  <strong className="text-navy">{relevantCount}</strong> מועמדות מתאימות מתוך{" "}
+                  <strong className="text-navy">{shownRows.length}</strong> מועמדות מתאימות מתוך{" "}
                   {total} במאגר
-                  {relevantCount > rows.length && <> · מוצגות {rows.length} המתאימות ביותר</>}
+                  {relevantCount > rows.length && <> · מדורגות {rows.length} הראשונות</>}
                 </>
               )}
               {selected.size > 0 && <> · נבחרו {selected.size}</>}
             </p>
             <div className="flex flex-wrap items-center gap-2">
+              {/* The employer asked for experience, not for a course syllabus. */}
+              <label className="flex cursor-pointer items-center gap-2 rounded-full bg-canvas px-4 py-2 text-[14px] font-semibold text-ink/80">
+                <input
+                  type="checkbox"
+                  checked={experienceOnly}
+                  onChange={(e) => {
+                    setOnlyExperience(e.currentTarget.checked);
+                    setSelected(new Set());
+                  }}
+                  className="focus-brand h-4 w-4 accent-[var(--color-primary)]"
+                />
+                רק ניסיון תעסוקתי
+                {studyOnlyCount > 0 && (
+                  <span className="font-normal text-ink/55">
+                    ({experienceOnly ? `${studyOnlyCount} מוסתרות` : `${studyOnlyCount} מהלימודים`})
+                  </span>
+                )}
+              </label>
               <button
                 type="button"
-                onClick={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))}
+                onClick={() => setSelected(allSelected ? new Set() : new Set(shownRows.map((r) => r.id)))}
                 className="focus-brand rounded-full border border-ink/15 px-4 py-2 text-[14px] font-semibold hover:bg-canvas"
               >
-                {allSelected ? "ביטול הבחירה" : `סימון כל ${rows.length} המועמדות`}
+                {allSelected ? "ביטול הבחירה" : `סימון כל ${shownRows.length} המועמדות`}
               </button>
               <button
                 type="button"
@@ -258,7 +290,7 @@ export function MatchWorkbench({
             </div>
           </div>
 
-          {rows.length === 0 ? (
+          {shownRows.length === 0 ? (
             <p className="py-10 text-center text-[15px] text-ink/60">
               {lookup
                 ? "לא נמצאה מועמדת עם הפרט הזה במאגר."
@@ -266,7 +298,7 @@ export function MatchWorkbench({
             </p>
           ) : (
             <ul className="flex flex-col divide-y divide-ink/8">
-              {rows.map((r) => (
+              {shownRows.map((r) => (
                 <li key={r.id}>
                   <label
                     className={cn(
@@ -365,12 +397,18 @@ export function MatchWorkbench({
                           </span>
                           {e.source === "fields" ? (
                             <span className="text-ink/55">— רשום בכרטיס המועמדת</span>
-                          ) : e.quote ? (
-                            <span className="text-ink/70">
-                              — מתוך קורות החיים: <q dir="auto">{e.quote}</q>
-                            </span>
                           ) : (
-                            <span className="text-ink/55">— מופיע בקורות החיים</span>
+                            <span className="text-ink/70">
+                              —{" "}
+                              <span className={e.section === "experience" ? "font-semibold text-navy" : undefined}>
+                                {SECTION_LABEL[e.section ?? "other"]}
+                              </span>
+                              {e.quote && (
+                                <>
+                                  : <q dir="auto">{e.quote}</q>
+                                </>
+                              )}
+                            </span>
                           )}
                         </li>
                       ))}

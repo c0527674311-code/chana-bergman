@@ -86,6 +86,8 @@ export type MatchResult = {
   missingTechnologies: string[];
   /** Where each match came from — her fields, or a line quoted from the CV. */
   evidence: MatchEvidence[];
+  /** True when something the requirement asked for appears in her employment history. */
+  experienceMatch: boolean;
 };
 
 export type MatchEvidence = {
@@ -94,4 +96,6 @@ export type MatchEvidence = {
   source: "fields" | "cv";
   /** A short quote around the match, when it comes from the CV text. */
   quote?: string;
+  /** Which part of the CV it came from — employment history, studies, skills list. */
+  section?: "experience" | "skills" | "projects" | "education" | "other";
 };

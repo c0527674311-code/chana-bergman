@@ -60,6 +60,8 @@ export type MatchRow = {
   missing: string[];
   /** Where each match came from — a field, or a quote from the CV. */
   evidence: MatchEvidence[];
+  /** True when the requirement's technology appears in her employment history. */
+  experienceMatch: boolean;
   /** Her current CV file: a link that works for an hour, or null when there is no file. */
   cvUrl: string | null;
   cvName: string | null;
@@ -122,6 +124,7 @@ export async function runMatch(
       matched: r.matchedTechnologies,
       missing: r.missingTechnologies,
       evidence: r.evidence,
+      experienceMatch: r.experienceMatch,
       cvUrl: cvs.get(r.candidate.id)?.url ?? null,
       cvName: cvs.get(r.candidate.id)?.name ?? null,
     })),

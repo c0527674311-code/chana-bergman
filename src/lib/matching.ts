@@ -7,6 +7,12 @@ import {
   TECHNOLOGIES,
 } from "@/lib/data/options";
 import { EXTRA_TECHNOLOGIES, EXTRA_TERMS } from "@/lib/data/tech-terms";
+import {
+  asksForExperience,
+  SECTION_WEIGHT,
+  splitCvSections,
+  type CvSection,
+} from "@/lib/cv-sections";
 import type { Candidate, MatchEvidence, MatchResult } from "@/lib/types";
 
 /**
@@ -184,6 +190,8 @@ export type ExtractedRequirement = {
   spokenLanguages: string[];
   /** Those of them it wants at native level ("אנגלית שפת אם"). */
   nativeLanguages: string[];
+  /** The text asks for hands-on experience ("ניסיון ב-", "מנוסה"), not just knowledge. */
+  experienceRequested: boolean;
   seniority: string | null;
   /** Every region the requirement names — "בשרון או במרכז" is both. */
   regions: string[];
@@ -312,6 +320,7 @@ export function extractRequirement(text: string): ExtractedRequirement {
     programmingLanguages,
     spokenLanguages,
     nativeLanguages,
+    experienceRequested: asksForExperience(text),
     unknownTerms:
       technologies.length || programmingLanguages.length || spokenLanguages.length
         ? []
@@ -461,24 +470,65 @@ export function scoreCandidate(
   const has = (term: string) =>
     skills.has(norm(term)) || spellings(term).some((s) => mentions(cvText, s));
 
-  // Chana sends these lists to employers, so every match must show its
-  // source: a field she can see on the card, or the line of the CV it came
-  // from — never a bare score.
-  const quoteAround = (needles: string[]): string | undefined => {
-    for (const needle of needles) {
-      const re = termPattern(needle);
-      const m = re?.exec(cvText);
-      if (!m) continue;
-      const start = Math.max(0, m.index - 70);
-      const end = Math.min(cvText.length, m.index + m[0].length + 70);
-      const quote = cvText.slice(start, end).replace(/\s+/g, " ").trim();
-      return `${start > 0 ? "…" : ""}${quote}${end < cvText.length ? "…" : ""}`;
+  // Which part of the CV a term sits in decides what it is worth: every
+  // graduate studied Java, so "מנוסה ב-Java" has to mean the employment
+  // history, not the course list.
+  const sections = splitCvSections(candidate.search_text ?? "");
+  const sectionText = {
+    experience: normText(sections.experience),
+    skills: normText(sections.skills),
+    other: normText(sections.other),
+    projects: normText(sections.projects),
+    education: normText(sections.education),
+  } satisfies Record<CvSection, string>;
+  const SECTION_ORDER: CvSection[] = ["experience", "skills", "other", "projects", "education"];
+
+  /** Where a term appears, how often in the employment history, and a quote. */
+  const locate = (needles: string[]) => {
+    let best: CvSection | null = null;
+    let quote: string | undefined;
+    let times = 0;
+    for (const section of SECTION_ORDER) {
+      const text = sectionText[section];
+      if (!text) continue;
+      for (const needle of needles) {
+        const re = termPattern(needle);
+        if (!re) continue;
+        const hits = text.match(re);
+        if (!hits?.length) continue;
+        if (section === "experience") times += hits.length;
+        if (best) continue;
+        best = section;
+        const m = termPattern(needle)?.exec(text);
+        if (m) {
+          const start = Math.max(0, m.index - 70);
+          const end = Math.min(text.length, m.index + m[0].length + 70);
+          quote = `${start > 0 ? "…" : ""}${text.slice(start, end).replace(/\s+/g, " ").trim()}${end < text.length ? "…" : ""}`;
+        }
+      }
     }
-    return undefined;
+    return { section: best, quote, times };
   };
+
+  // Chana sends these lists to employers, so every match must show its
+  // source: which part of the CV it came from, or her card — never a bare score.
   const evidence: MatchEvidence[] = [];
-  const cite = (term: string, listed: boolean, needles: string[]) => {
-    evidence.push(listed ? { term, source: "fields" } : { term, source: "cv", quote: quoteAround(needles) });
+  let experienceHits = 0;
+
+  /** Records the match and returns what it is worth, 0–1, by where it sits. */
+  const cite = (term: string, listed: boolean, needles: string[]): number => {
+    const { section, quote, times } = locate(needles);
+    if (section === "experience") experienceHits += times;
+    if (section) {
+      evidence.push({ term, source: "cv", quote, section });
+      // A technology named again and again in the jobs she held is her trade,
+      // not a line on a list.
+      return Math.min(1, SECTION_WEIGHT[section] + (times >= 3 ? 0.15 : 0));
+    }
+    // On her card but nowhere in the CV text: real, but nothing says it comes
+    // from a job she held.
+    evidence.push({ term, source: "fields" });
+    return listed ? SECTION_WEIGHT.skills : SECTION_WEIGHT.education;
   };
 
   const matchedTechnologies = req.technologies.filter(has);
@@ -489,24 +539,29 @@ export function scoreCandidate(
   // against her when not — a miss may just be an ordinary word.
   const matchedUnknown = req.unknownTerms.filter(has);
 
-  for (const t of [...matchedLangs, ...matchedTechnologies]) cite(t, skills.has(norm(t)), spellings(t));
-  for (const t of matchedUnknown) cite(t, false, [t]);
+  // Each match is worth what its place in the CV says it is worth.
+  const langValue = matchedLangs.reduce((sum, l) => sum + cite(l, skills.has(norm(l)), spellings(l)), 0);
+  const techValue = matchedTechnologies.reduce(
+    (sum, t) => sum + cite(t, skills.has(norm(t)), spellings(t)),
+    0,
+  );
+  const unknownValue = matchedUnknown.reduce((sum, t) => sum + cite(t, false, [t]), 0);
 
   let score = 0;
   let max = 0;
 
   if (req.technologies.length) {
     max += WEIGHTS.tech * req.technologies.length;
-    score += WEIGHTS.tech * matchedTechnologies.length;
+    score += WEIGHTS.tech * techValue;
   }
   if (req.programmingLanguages.length) {
     max += WEIGHTS.lang * req.programmingLanguages.length;
-    score += WEIGHTS.lang * matchedLangs.length;
+    score += WEIGHTS.lang * langValue;
   }
 
   if (req.unknownTerms.length) {
     max += WEIGHTS.tech;
-    if (matchedUnknown.length) score += WEIGHTS.tech;
+    if (matchedUnknown.length) score += WEIGHTS.tech * Math.min(1, unknownValue);
   }
 
   // Spoken languages. "שפת אם" is a level the fields don't hold, so it is read
@@ -586,6 +641,8 @@ export function scoreCandidate(
     matchedTechnologies: [...matchedLangs, ...matchedTechnologies, ...matchedUnknown, ...matchedSpoken],
     missingTechnologies: [...missingLangs, ...missingTechnologies],
     evidence,
+    // At least one of the things asked for appears in a job she held.
+    experienceMatch: experienceHits > 0,
   };
 }
 
@@ -697,6 +754,7 @@ function directLookup(candidates: Candidate[], text: string): MatchResult[] {
       matchedTechnologies: [],
       missingTechnologies: [],
       evidence: [inIdentity ? { term: q, source: "fields" } : { term: q, source: "cv", quote }],
+      experienceMatch: false,
     });
   }
   return hits.sort((a, b) => b.score - a.score);
