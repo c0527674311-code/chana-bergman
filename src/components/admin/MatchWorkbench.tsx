@@ -37,6 +37,34 @@ export function MatchWorkbench({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
   const [campaignOpen, setCampaignOpen] = useState(false);
+  const [zipping, setZipping] = useState(false);
+
+  /** One zip with the current CV of every chosen candidate — what goes to the employer. */
+  async function downloadCvs(chosen: Row[]) {
+    setZipping(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/cvs/zip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: chosen.map((r) => r.id) }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error ?? "ההורדה נכשלה.");
+      }
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `קורות חיים ${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "ההורדה נכשלה.");
+    } finally {
+      setZipping(false);
+    }
+  }
 
   const selectedRows = useMemo(
     () => (rows ?? []).filter((r) => selected.has(r.id)),
@@ -202,6 +230,15 @@ export function MatchWorkbench({
               >
                 ייצוא רשימה
               </button>
+              <button
+                type="button"
+                disabled={!selectedRows.length || zipping}
+                onClick={() => downloadCvs(selectedRows)}
+                className="focus-brand rounded-full border border-ink/15 px-4 py-2 text-[14px] font-semibold hover:bg-canvas disabled:opacity-40"
+                title="כל קורות החיים של הנבחרות בקובץ zip אחד, לשליחה למעסיק"
+              >
+                {zipping ? "אורזת…" : `הורדת קו״ח (${selectedRows.length})`}
+              </button>
               <ConsentButton
                 candidates={selectedRows}
                 onMarked={(ids) =>
@@ -294,10 +331,51 @@ export function MatchWorkbench({
                         ))}
                       </span>
                     </span>
-                    <span className="hidden shrink-0 text-[13px] text-ink/55 sm:block" dir="ltr">
-                      {r.email}
+                    <span className="flex shrink-0 flex-col items-end gap-1.5">
+                      <span className="hidden text-[13px] text-ink/55 sm:block" dir="ltr">
+                        {r.email}
+                      </span>
+                      {r.cvUrl ? (
+                        <a
+                          href={r.cvUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          title={r.cvName ?? undefined}
+                          className="focus-brand rounded-full bg-primary-50 px-3 py-1 text-[13px] font-semibold text-primary hover:bg-primary-100"
+                        >
+                          קורות חיים ↗
+                        </a>
+                      ) : (
+                        <span className="text-[12px] text-ink/45">אין קובץ קו״ח</span>
+                      )}
                     </span>
                   </label>
+                  {/* Chana sends this list on; a score alone is not something she can vouch for. */}
+                  <details className="-mt-2 mb-1 ps-[76px] pe-3 pb-2">
+                    <summary className="focus-brand inline-block cursor-pointer rounded text-[13px] font-semibold text-primary/80 hover:text-primary">
+                      מאיפה ההתאמה?
+                    </summary>
+                    <ul className="mt-1.5 flex flex-col gap-1 text-[13px] text-ink/75">
+                      {r.evidence.length === 0 && <li>לא נמצאה עדות ספציפית — רק ציון כללי.</li>}
+                      {r.evidence.map((e, i) => (
+                        <li key={i} className="flex flex-wrap items-baseline gap-x-2">
+                          <span className="font-semibold text-navy" dir="auto">
+                            {e.term}
+                          </span>
+                          {e.source === "fields" ? (
+                            <span className="text-ink/55">— רשום בכרטיס המועמדת</span>
+                          ) : e.quote ? (
+                            <span className="text-ink/70">
+                              — מתוך קורות החיים: <q dir="auto">{e.quote}</q>
+                            </span>
+                          ) : (
+                            <span className="text-ink/55">— מופיע בקורות החיים</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
                 </li>
               ))}
             </ul>

@@ -7,7 +7,7 @@ import {
   TECHNOLOGIES,
 } from "@/lib/data/options";
 import { EXTRA_TECHNOLOGIES, EXTRA_TERMS } from "@/lib/data/tech-terms";
-import type { Candidate, MatchResult } from "@/lib/types";
+import type { Candidate, MatchEvidence, MatchResult } from "@/lib/types";
 
 /**
  * Requirement matching — "איתור מיידי של מועמדת מתאימה לפי דרישה".
@@ -461,6 +461,26 @@ export function scoreCandidate(
   const has = (term: string) =>
     skills.has(norm(term)) || spellings(term).some((s) => mentions(cvText, s));
 
+  // Chana sends these lists to employers, so every match must show its
+  // source: a field she can see on the card, or the line of the CV it came
+  // from — never a bare score.
+  const quoteAround = (needles: string[]): string | undefined => {
+    for (const needle of needles) {
+      const re = termPattern(needle);
+      const m = re?.exec(cvText);
+      if (!m) continue;
+      const start = Math.max(0, m.index - 70);
+      const end = Math.min(cvText.length, m.index + m[0].length + 70);
+      const quote = cvText.slice(start, end).replace(/\s+/g, " ").trim();
+      return `${start > 0 ? "…" : ""}${quote}${end < cvText.length ? "…" : ""}`;
+    }
+    return undefined;
+  };
+  const evidence: MatchEvidence[] = [];
+  const cite = (term: string, listed: boolean, needles: string[]) => {
+    evidence.push(listed ? { term, source: "fields" } : { term, source: "cv", quote: quoteAround(needles) });
+  };
+
   const matchedTechnologies = req.technologies.filter(has);
   const missingTechnologies = req.technologies.filter((t) => !matchedTechnologies.includes(t));
   const matchedLangs = req.programmingLanguages.filter(has);
@@ -468,6 +488,9 @@ export function scoreCandidate(
   // Words with no entry in our vocabulary: shown when found, never held
   // against her when not — a miss may just be an ordinary word.
   const matchedUnknown = req.unknownTerms.filter(has);
+
+  for (const t of [...matchedLangs, ...matchedTechnologies]) cite(t, skills.has(norm(t)), spellings(t));
+  for (const t of matchedUnknown) cite(t, false, [t]);
 
   let score = 0;
   let max = 0;
@@ -499,30 +522,42 @@ export function scoreCandidate(
       if (native) {
         score += WEIGHTS.spoken;
         matchedSpoken.push(`${language}${NATIVE_SUFFIX}`);
+        cite(`${language}${NATIVE_SUFFIX}`, false, ["שפת אם", "native", "mother tongue"]);
       } else if (knows) {
         score += WEIGHTS.spoken / 2;
         matchedSpoken.push(language);
+        cite(language, spokenList.has(norm(language)), spokenNames(language));
       }
     } else if (knows) {
       score += WEIGHTS.spoken;
       matchedSpoken.push(language);
+      cite(language, spokenList.has(norm(language)), spokenNames(language));
     }
   }
 
   if (req.seniority) {
     max += WEIGHTS.seniority;
-    if (candidate.seniority === req.seniority) score += WEIGHTS.seniority;
+    if (candidate.seniority === req.seniority) {
+      score += WEIGHTS.seniority;
+      evidence.push({ term: candidate.seniority, source: "fields" });
+    }
   }
 
   const region = matchingRegion(candidate, req);
   if (req.regions.length) {
     max += WEIGHTS.region;
-    if (region) score += WEIGHTS.region;
+    if (region) {
+      score += WEIGHTS.region;
+      evidence.push({ term: `אזור ${region}`, source: "fields" });
+    }
   }
 
   if (req.minYears != null) {
     max += WEIGHTS.years;
-    if (bucketFloor(candidate.experience_years) >= req.minYears) score += WEIGHTS.years;
+    if (bucketFloor(candidate.experience_years) >= req.minYears) {
+      score += WEIGHTS.years;
+      evidence.push({ term: `ניסיון: ${candidate.experience_years}`, source: "fields" });
+    }
   }
 
   // Nothing in the requirement to measure against — not a match, just noise.
@@ -550,6 +585,7 @@ export function scoreCandidate(
     ),
     matchedTechnologies: [...matchedLangs, ...matchedTechnologies, ...matchedUnknown, ...matchedSpoken],
     missingTechnologies: [...missingLangs, ...missingTechnologies],
+    evidence,
   };
 }
 
@@ -647,6 +683,11 @@ function directLookup(candidates: Candidate[], text: string): MatchResult[] {
       : identity.includes(needle);
     const inCv = byNumber ? cv.replace(/\D/g, "").includes(digits) : cv.includes(needle);
     if (!inIdentity && !inCv) continue;
+    let quote: string | undefined;
+    if (!inIdentity) {
+      const i = byNumber ? -1 : cv.indexOf(needle);
+      if (i >= 0) quote = `…${cv.slice(Math.max(0, i - 70), i + needle.length + 70).replace(/\s+/g, " ").trim()}…`;
+    }
     hits.push({
       candidate: c,
       score: inIdentity ? 100 : 70,
@@ -655,6 +696,7 @@ function directLookup(candidates: Candidate[], text: string): MatchResult[] {
         : "הפרט שחיפשת מופיע בתוך קורות החיים",
       matchedTechnologies: [],
       missingTechnologies: [],
+      evidence: [inIdentity ? { term: q, source: "fields" } : { term: q, source: "cv", quote }],
     });
   }
   return hits.sort((a, b) => b.score - a.score);

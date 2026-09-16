@@ -84,4 +84,14 @@ export type MatchResult = {
   reason: string;
   matchedTechnologies: string[];
   missingTechnologies: string[];
+  /** Where each match came from — her fields, or a line quoted from the CV. */
+  evidence: MatchEvidence[];
+};
+
+export type MatchEvidence = {
+  term: string;
+  /** "fields": she listed it in the form / it was filed; "cv": quoted from the CV text. */
+  source: "fields" | "cv";
+  /** A short quote around the match, when it comes from the CV text. */
+  quote?: string;
 };
