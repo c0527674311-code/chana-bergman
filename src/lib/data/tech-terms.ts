@@ -61,7 +61,7 @@ export const EXTRA_TERMS: ExtraTerm[] = [
   { term: "DB2", kind: "tech" },
   { term: "CICS", kind: "tech" },
   { term: "JCL", kind: "tech" },
-  { term: "SAP", kind: "tech", aliases: ["סאפ"] },
+  { term: "SAP", kind: "tech", aliases: ["סאפ", "sapui5", "sap ui5", "s/4hana", "sap hana", "sap b1", "sap business one", "abap"] },
   { term: "Priority", kind: "tech", aliases: ["פריוריטי", "פריורטי"] },
   { term: "Magic XPA", kind: "tech", aliases: ["magic unipaas", "מג'יק", "מג׳יק"] },
   { term: "PowerBuilder", kind: "tech" },

@@ -41,6 +41,11 @@ export type ParsedCv = {
   institution_name: string | null;
   cohort_year: number | null;
   summary: string | null;
+  /**
+   * The whole CV as text, only for a scan or photo with no text layer — so a
+   * search for a word in it finds her, and the match screen can quote it.
+   */
+  full_text: string | null;
   /** Model's own confidence, so low-quality scans land in the review queue. */
   confidence: "high" | "medium" | "low";
 };
@@ -81,6 +86,7 @@ const SCHEMA = {
     institution_name: { type: ["string", "null"] },
     cohort_year: { type: ["integer", "null"] },
     summary: { type: ["string", "null"] },
+    full_text: { type: ["string", "null"] },
     confidence: { type: "string", enum: ["high", "medium", "low"] },
   },
   required: [
@@ -100,6 +106,7 @@ const SCHEMA = {
     "institution_name",
     "cohort_year",
     "summary",
+    "full_text",
     "confidence",
   ],
 } as const;
@@ -123,6 +130,8 @@ const SYSTEM = `אתה מחלץ פרטים מקורות חיים של מתכנת
   או null אם לא כתוב.
 - cohort_year — שנת סיום הלימודים/הקורס רק אם היא כתובה במפורש. לא לנחש.
 - summary — שורה אחת בעברית שמתארת את המועמדת (עד 25 מילים).
+- full_text — null, אלא אם ההוראה בהודעה מבקשת תמלול: אז כל הטקסט של קורות החיים
+  מילה במילה, בשפת המקור, כולל טכנולוגיות, מקומות עבודה ותאריכים.
 - confidence — "low" אם הקובץ מטושטש, חלקי, או שלא הצלחת לקרוא חלקים משמעותיים.`;
 
 function client() {
@@ -217,7 +226,9 @@ export async function parseCv(
   const { blocks, extractedText } = await buildContent(buffer, fileName);
   const instruction = opts.voice
     ? "זהו תמלול של הקלטה קולית שבה מועמדת מספרת את פרטיה בעל פה. הטקסט דיבורי ולא ערוך — חלץ ממנו את הפרטים. שמות טכנולוגיות עשויים להופיע בתעתיק עברי (\"ריאקט\", \"ג'אווה\") — מפה אותם לערכים באנגלית מהרשימות המותרות. כתובת מייל: הרכב אותה מכל החלקים שנאמרו לפני \"שטרודל\" — אות באנגלית שנאמרה בעברית (\"סי\" = c, \"בי\" = b) היא חלק מהכתובת ואסור להשמיט אותה, ומקפים בין ספרות אינם חלק מהכתובת."
-    : "חלץ את הפרטים מקורות החיים האלה.";
+    : extractedText === null
+      ? "חלץ את הפרטים מקורות החיים האלה. לקובץ הזה אין שכבת טקסט (סריקה או צילום), לכן ב-full_text החזר תמלול מלא של כל מה שכתוב בו, מילה במילה."
+      : "חלץ את הפרטים מקורות החיים האלה. full_text — null.";
 
   const response = await client().messages.create({
     model: MODEL,
@@ -265,7 +276,9 @@ export async function parseCv(
     if (Array.isArray(list)) parsed[key] = [...new Set(list)];
   }
 
-  return { parsed, extractedText };
+  // A scan has no text of its own; the model's transcription stands in for it.
+  const transcript = parsed.full_text?.trim() || null;
+  return { parsed, extractedText: extractedText ?? transcript };
 }
 
 /** Reasonable per-file cap so a stray 200-page PDF doesn't stall an import. */
