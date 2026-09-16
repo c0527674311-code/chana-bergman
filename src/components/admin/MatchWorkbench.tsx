@@ -44,7 +44,7 @@ export function MatchWorkbench({
     setZipping(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/cvs/zip", {
+      const res = await fetch("/api/admin/cv-files-zip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: chosen.map((r) => r.id) }),
