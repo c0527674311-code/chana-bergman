@@ -119,6 +119,44 @@ async function pdfText(buffer: Buffer): Promise<string | null> {
 }
 
 /**
+ * The picture inside a Word/ODT file that has no text of its own.
+ *
+ * People scan a printed CV and paste the image into Word. The document then
+ * holds nothing to read — but the model can read the picture, so it is pulled
+ * out and sent as an image instead of failing the file.
+ */
+export async function embeddedImage(
+  buffer: Buffer,
+  format: CvFormat,
+): Promise<{ data: Buffer; mediaType: "image/png" | "image/jpeg" | "image/gif" | "image/webp" } | null> {
+  if (format.kind !== "docx" && format.kind !== "odt") return null;
+  const types: Record<string, "image/png" | "image/jpeg" | "image/gif" | "image/webp"> = {
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+  };
+  try {
+    const zip = await JSZip.loadAsync(buffer);
+    let best: { name: string; size: number } | null = null;
+    zip.forEach((path, file) => {
+      const ext = path.toLowerCase().split(".").pop() ?? "";
+      if (!/(word\/media|pictures)\//i.test(path) || !(ext in types)) return;
+      // @ts-expect-error — _data carries the uncompressed size JSZip exposes nowhere else
+      const size = (file._data?.uncompressedSize as number) ?? 0;
+      if (!best || size > best.size) best = { name: path, size };
+    });
+    if (!best) return null;
+    const name = (best as { name: string }).name;
+    const data = await zip.file(name)!.async("nodebuffer");
+    return { data, mediaType: types[name.toLowerCase().split(".").pop() ?? "png"] };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Plain text of a CV, for search and (for Word/text files) for the model.
  * PDFs keep word order imperfectly for Hebrew, but every word is intact, so
  * searching for a word still finds her. Images have no text layer: null.

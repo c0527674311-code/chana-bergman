@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { detectFormat, extractText, UnreadableFileError } from "@/lib/cv-text";
+import { detectFormat, embeddedImage, extractText, UnreadableFileError } from "@/lib/cv-text";
 import { EXTRA_PROGRAMMING_LANGUAGES, EXTRA_TECHNOLOGIES } from "@/lib/data/tech-terms";
 import {
   CITIES,
@@ -169,7 +169,22 @@ async function buildContent(
 
   // Word, RTF, ODT and plain text have no native content block — text first.
   const text = await extractText(buffer, format);
-  if (!text) throw new UnreadableFileError("לא נמצא טקסט בקובץ — ייתכן שהוא ריק או סרוק כתמונה.");
+  if (!text) {
+    // A scan pasted into a Word file: no text, one picture. The model reads it.
+    const image = await embeddedImage(buffer, format);
+    if (image) {
+      return {
+        blocks: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: image.mediaType, data: image.data.toString("base64") },
+          },
+        ],
+        extractedText: null,
+      };
+    }
+    throw new UnreadableFileError("לא נמצא טקסט בקובץ — ייתכן שהוא ריק או סרוק כתמונה.");
+  }
 
   // Guard the context window on unusually long CVs.
   const clipped = text.slice(0, 120_000);
