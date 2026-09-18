@@ -10,6 +10,7 @@ import {
   SENIORITY,
   TECHNOLOGIES,
   cohortYears,
+  practicumYears,
 } from "@/lib/data/options";
 import type { CandidateFilters as Filters } from "@/lib/queries";
 
@@ -25,7 +26,10 @@ const SELECTS: Array<{ key: keyof Filters; label: string; options: readonly (str
   {
     key: "practicum",
     label: "פרקטיקום DiversiTech",
-    options: [{ value: "yes", label: "בוגרות הפרקטיקום בלבד" }],
+    options: [
+      { value: "yes", label: "כל בוגרות הפרקטיקום" },
+      ...practicumYears().map((y) => ({ value: String(y), label: `מחזור ${y}` })),
+    ],
   },
 ];
 

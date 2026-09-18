@@ -1,6 +1,6 @@
 "use client";
 
-import { Checkbox, Input, MultiSelect, RadioRow, Select, Textarea } from "@/components/ui/Field";
+import { Input, MultiSelect, RadioRow, Select, Textarea } from "@/components/ui/Field";
 import {
   CITIES,
   EXPERIENCE_YEARS,
@@ -8,6 +8,7 @@ import {
   REGIONS,
   SPOKEN_LANGUAGES,
   TECHNOLOGIES,
+  practicumYears,
 } from "@/lib/data/options";
 import type { Candidate } from "@/lib/types";
 
@@ -98,15 +99,20 @@ export function CandidateProfileFields({
         defaultValue={candidate?.notes_from_candidate ?? ""}
       />
 
-      <Checkbox
-        className="pt-1"
-        name="diversitech_practicum"
-        defaultChecked={Boolean(candidate?.diversitech_practicum)}
-        label={
-          <>
-            אני בוגרת פרקטיקום של{" "}
-            <span className="font-semibold text-navy">DiversiTech</span>
-          </>
+      {/* The year matters as much as the fact: it says how fresh she is. */}
+      <Select
+        label="בוגרת פרקטיקום DiversiTech"
+        name="diversitech"
+        placeholder="בוגרת פרקטיקום DiversiTech? (לא חובה)"
+        options={[
+          { value: "no", label: "לא" },
+          ...practicumYears().map((y) => ({ value: String(y), label: `כן — מחזור ${y}` })),
+          { value: "yes", label: "כן — שנה אחרת" },
+        ]}
+        defaultValue={
+          candidate?.diversitech_practicum
+            ? (candidate.diversitech_year ? String(candidate.diversitech_year) : "yes")
+            : ""
         }
       />
 

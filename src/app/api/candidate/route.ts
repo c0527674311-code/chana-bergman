@@ -130,7 +130,7 @@ export async function POST(request: Request) {
     experience_years: String(form.get("experience_years") ?? "").trim() || null,
     notes_from_candidate: String(form.get("notes_from_candidate") ?? "").trim() || null,
     contact_before_sending: form.get("contact_before_sending") === "yes",
-    diversitech_practicum: form.get("diversitech_practicum") != null,
+    ...practicumFields(form),
   };
 
   if (!adminConfigured()) {
@@ -339,7 +339,22 @@ type Fields = {
   notes_from_candidate: string | null;
   contact_before_sending: boolean;
   diversitech_practicum: boolean;
+  diversitech_year: number | null;
 };
+
+/**
+ * "בוגרת פרקטיקום DiversiTech" is one select: a year, "yes" without one, or
+ * nothing. The old checkbox name is still accepted, for a page left open.
+ */
+function practicumFields(form: FormData): { diversitech_practicum: boolean; diversitech_year: number | null } {
+  const value = String(form.get("diversitech") ?? "").trim();
+  if (/^\d{4}$/.test(value)) return { diversitech_practicum: true, diversitech_year: Number(value) };
+  if (value === "yes") return { diversitech_practicum: true, diversitech_year: null };
+  if (value === "no" || value === "") {
+    return { diversitech_practicum: form.get("diversitech_practicum") != null, diversitech_year: null };
+  }
+  return { diversitech_practicum: false, diversitech_year: null };
+}
 
 /** Her record: linked to her account, or — the first time — the one with her verified address. */
 async function ownRecord(admin: SupabaseClient, user: { id: string; email: string | null }) {
@@ -386,7 +401,7 @@ async function addToExisting(admin: SupabaseClient, candidateId: string, fields:
   const { data: existing, error } = await admin
     .from("candidates")
     .select(
-      "first_name, last_name, email, phone, city, experience_years, notes_from_candidate, contact_before_sending, diversitech_practicum, preferred_regions, spoken_languages, programming_languages, technologies",
+      "first_name, last_name, email, phone, city, experience_years, notes_from_candidate, contact_before_sending, diversitech_practicum, diversitech_year, preferred_regions, spoken_languages, programming_languages, technologies",
     )
     .eq("id", candidateId)
     .single();
@@ -414,6 +429,9 @@ async function addToExisting(admin: SupabaseClient, candidateId: string, fields:
   }
   if (fields.diversitech_practicum && !existing.diversitech_practicum) {
     patch.diversitech_practicum = true;
+  }
+  if (fields.diversitech_year && !existing.diversitech_year) {
+    patch.diversitech_year = fields.diversitech_year;
   }
 
   const { error: upErr } = await admin.from("candidates").update(patch).eq("id", candidateId);

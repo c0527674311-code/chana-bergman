@@ -30,6 +30,8 @@ export type Candidate = {
   contact_before_sending: boolean;
   /** Graduate of the DiversiTech practicum. */
   diversitech_practicum: boolean;
+  /** Which practicum cohort she finished, when she said. */
+  diversitech_year: number | null;
   status: CandidateStatus;
   source: CandidateSource;
   tags: string[];

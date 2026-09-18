@@ -332,7 +332,7 @@ export function MatchWorkbench({
                         )}
                         {r.practicum && (
                           <span className="rounded-full bg-mint-100 px-2 py-0.5 text-[12px] font-semibold text-navy">
-                            פרקטיקום DiversiTech
+                            פרקטיקום DiversiTech{r.practicumYear ? ` ${r.practicumYear}` : ""}
                           </span>
                         )}
                         {r.status === "placed" && (

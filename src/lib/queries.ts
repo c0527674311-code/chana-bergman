@@ -13,7 +13,7 @@ export type CandidateFilters = {
   institution?: string;
   cohort?: string;
   status?: string;
-  /** "yes" — only DiversiTech practicum graduates. */
+  /** "yes" — every DiversiTech graduate; a year — that cohort only. */
   practicum?: string;
 };
 
@@ -70,6 +70,9 @@ async function fetchPage(
   if (filters.institution) query = query.eq("institution", filters.institution);
   if (filters.cohort) query = query.eq("cohort_year", Number(filters.cohort));
   if (filters.practicum === "yes") query = query.eq("diversitech_practicum", true);
+  else if (/^\d{4}$/.test(filters.practicum ?? "")) {
+    query = query.eq("diversitech_practicum", true).eq("diversitech_year", Number(filters.practicum));
+  }
   if (filters.technology) query = query.contains("technologies", [filters.technology]);
   if (filters.language) query = query.contains("programming_languages", [filters.language]);
   if (filters.q) {
@@ -98,6 +101,7 @@ function filterInMemory(rows: Candidate[], f: CandidateFilters): Candidate[] {
     if (f.institution && r.institution !== f.institution) return false;
     if (f.cohort && String(r.cohort_year) !== f.cohort) return false;
     if (f.practicum === "yes" && !r.diversitech_practicum) return false;
+    if (/^\d{4}$/.test(f.practicum ?? "") && String(r.diversitech_year) !== f.practicum) return false;
     if (f.technology && !r.technologies.includes(f.technology)) return false;
     if (f.language && !r.programming_languages.includes(f.language)) return false;
     if (f.q) {

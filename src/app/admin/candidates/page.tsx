@@ -59,6 +59,7 @@ export default async function CandidatesPage({
               status: c.status,
               updatedAt: c.updated_at,
               practicum: c.diversitech_practicum,
+              practicumYear: c.diversitech_year,
               mailable: Boolean(c.email && c.consent_marketing && !c.unsubscribed_at),
               unsubscribed: Boolean(c.unsubscribed_at),
             }))}

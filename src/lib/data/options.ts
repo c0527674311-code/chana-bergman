@@ -225,5 +225,14 @@ export function cohortYears(now = new Date()): number[] {
   return Array.from({ length: newest - FIRST_COHORT_YEAR + 1 }, (_, i) => newest - i);
 }
 
+/** The first DiversiTech practicum cohort. */
+const FIRST_PRACTICUM_YEAR = 2024;
+
+/** Practicum years to offer, newest first — a new year appears on its own. */
+export function practicumYears(now = new Date()): number[] {
+  const newest = now.getFullYear();
+  return Array.from({ length: newest - FIRST_PRACTICUM_YEAR + 1 }, (_, i) => newest - i);
+}
+
 export type Region = (typeof REGIONS)[number];
 export type Seniority = (typeof SENIORITY)[number];
