@@ -179,6 +179,13 @@ function termPattern(needle: string): RegExp | null {
  */
 const NOT_BEFORE: Record<string, string> = {
   java: "[\\s-]*script",
+  // Hebrew too: "ג'אווה סקריפט" is JavaScript, and counting it as Java put
+  // front-end developers in front of an employer who asked for a Java server.
+  "ג'אווה": "[\\s-]*סקריפט",
+  "ג׳אווה": "[\\s-]*סקריפט",
+  "גאווה": "[\\s-]*סקריפט",
+  "ג'אוה": "[\\s-]*סקריפט",
+  "ג׳אוה": "[\\s-]*סקריפט",
 };
 
 /**
