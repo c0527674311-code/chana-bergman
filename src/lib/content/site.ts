@@ -209,6 +209,6 @@ export const CONTACT_DETAILS = {
   cvEmail: "",
   phone: "052-767-4311",
   phoneAlt: "073-338-3374",
-  address: "קליקה, ז׳בוטינסקי 71, בני ברק",
+  address: "ז׳בוטינסקי 71, בני ברק",
   linkedin: "",
 } as const;
