@@ -71,9 +71,20 @@ const ALIASES: Record<string, string> = {
   "נט קור": ".NET Core",
   "איי אס פי": "ASP.NET",
   "סי שארפ": "C#",
-  "אס קיו אל סרבר": "SQL Server",
-  "אס קיו אל": "SQL",
+  "סישארפ": "C#",
+  "סיאשארפ": "C#",
+  "סי אשארפ": "C#",
+  "סי פלוס פלוס": "C++",
+  "סיפלוספלוס": "C++",
+  "נוד": "Node.js",
+  "נוד ג'יאס": "Node.js",
   "טייפסקריפט": "TypeScript",
+  "טייפ סקריפט": "TypeScript",
+  "ג'אווה סקריפט": "JavaScript",
+  "וויו": "Vue",
+  "אס קיו אל": "SQL",
+  "סיקוול": "SQL",
+  "אס קיו אל סרבר": "SQL Server",
   "ריאקט נייטיב": "React Native",
   "נקסט": "Next.js",
   "ג׳נגו": "Django",
@@ -224,6 +235,8 @@ export type ExtractedRequirement = {
   nativeLanguages: string[];
   /** The text asks for hands-on experience ("ניסיון ב-", "מנוסה"), not just knowledge. */
   experienceRequested: boolean;
+  /** The text asks for DiversiTech practicum graduates. */
+  practicum: boolean;
   seniority: string | null;
   /** Every region the requirement names — "בשרון או במרכז" is both. */
   regions: string[];
@@ -284,10 +297,10 @@ function extractMinYears(text: string): number | null {
   );
   // A single year needs context — "שנה" alone is also "השנה", "שנה א'".
   collect(
-    /(?<!\p{L})(?:(?:לפחות|מינימום|מעל|יותר\s*מ-?|ניסיון\s+של)\s*)שנ(?:ה|ת)(?:\s+אחת)?(?!\p{L})/gu,
+    /(?<!\p{L})(?:(?:לפחות|מינימום|מעל|יותר\s*מ-?|ני?סיון\s+של)\s*)שנ(?:ה|ת)(?:\s+אחת)?(?!\p{L})/gu,
     () => 1,
   );
-  collect(/(?<!\p{L})[ובכ]?שנ(?:ה|ת)(?:\s+אחת)?\s+(?:ניסיון|לפחות)(?!\p{L})/gu, () => 1);
+  collect(/(?<!\p{L})[ובכ]?שנ(?:ה|ת)(?:\s+אחת)?\s+(?:ני?סיון|לפחות)(?!\p{L})/gu, () => 1);
 
   if (!hits.length) return null;
   return hits.reduce((first, h) => (h.index < first.index ? h : first)).years;
@@ -369,6 +382,8 @@ export function extractRequirement(text: string): ExtractedRequirement {
     spokenLanguages,
     nativeLanguages,
     experienceRequested: asksForExperience(text),
+    // Chana types "פרקטיקום" into the same box; it was read as an ordinary word.
+    practicum: /פרקטיקום|פרקטיקם|diversitech|דיברסיטק|דייברסיטק/i.test(text),
     unknownTerms:
       technologies.length || programmingLanguages.length || spokenLanguages.length
         ? []
@@ -389,6 +404,8 @@ const STOPWORDS = new Set(
    בצוות סביבת סביבה תחום בתחום אזור באזור מרחוק היברידי משרדי בעלת יכולת ראש יסודיות אנגלית
    עברית תואר הנדסאית הנדסאי בוגרת בוגר קורס לימודים תפקיד התפקיד כולל וכן וגם עם על של את
    אנחנו אנו מחפשים מחפשות למשרה למשרד לחברה גדולה מובילה צומחת בתל אביב ירושלים מרכז
+   בחורה חורה מישהי אישה אשה מועמדת עובד שעבדה עבדה עבד שיודעת יודעת שולטת שליטה מתמחה
+   רצוי נדרש נדרשת נדרשים דרישות תנאי תנאים כישורים מיומנויות אחריות משימות תיאור מחפשת
    required requirement requirements experience years year developer development engineer team
    lead senior junior full stack fullstack backend frontend back front end web software company
    position role job knowledge strong good excellent must have with and the for our you your
@@ -648,6 +665,17 @@ export function scoreCandidate(
     }
   }
 
+  if (req.practicum) {
+    max += WEIGHTS.tech;
+    if (isPracticumGraduate(candidate)) {
+      score += WEIGHTS.tech;
+      evidence.push({
+        term: candidate.diversitech_year ? `פרקטיקום DiversiTech ${candidate.diversitech_year}` : "פרקטיקום DiversiTech",
+        source: "fields",
+      });
+    }
+  }
+
   if (req.seniority) {
     max += WEIGHTS.seniority;
     if (candidate.seniority === req.seniority) {
@@ -706,6 +734,11 @@ export function scoreCandidate(
   };
 }
 
+/** Marked on her card, or filed under the practicum before that field existed. */
+function isPracticumGraduate(c: Candidate): boolean {
+  return Boolean(c.diversitech_practicum) || c.institution === "פרקטיקום";
+}
+
 /** One human-readable line explaining the match — shown next to every result. */
 function buildReason(
   c: Candidate,
@@ -747,6 +780,9 @@ function buildReason(
  */
 function isRelevant(result: MatchResult, req: ExtractedRequirement): boolean {
   const asked = req.programmingLanguages.length + req.technologies.length;
+  // "בוגרת פרקטיקום" is a yes or no, not a point on a scale.
+  if (req.practicum && !isPracticumGraduate(result.candidate)) return false;
+
   // "אנגלית שפת אם" asks for the level, not just the language: knowing English
   // is a near miss, not a match.
   if (!asked && req.nativeLanguages.length) {
@@ -756,7 +792,7 @@ function isRelevant(result: MatchResult, req: ExtractedRequirement): boolean {
   if (!asked && (req.unknownTerms.length || req.spokenLanguages.length)) {
     return result.matchedTechnologies.length > 0;
   }
-  if (!asked) return result.score >= 60;
+  if (!asked) return req.practicum || result.score >= 60;
   const hits = result.matchedTechnologies.length;
   if (!hits) return false;
   return asked <= 2 || hits >= Math.ceil(asked / 3);
@@ -771,6 +807,7 @@ function hasSignals(req: ExtractedRequirement): boolean {
       req.spokenLanguages.length ||
       req.regions.length ||
       req.seniority ||
+      req.practicum ||
       req.minYears != null,
   );
 }
