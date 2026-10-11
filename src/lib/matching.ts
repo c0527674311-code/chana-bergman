@@ -49,6 +49,7 @@ const ALIASES: Record<string, string> = {
   "cpp": "C++",
   "c plus plus": "C++",
   js: "JavaScript",
+  "java script": "JavaScript",
   ts: "TypeScript",
   py: "Python",
   postgres: "PostgreSQL",
@@ -157,7 +158,38 @@ function termPattern(needle: string): RegExp | null {
     .join("[\\s-]+");
   const joiners = !HEBREW.test(n) && n.length <= 2 ? "&\\-" : "&";
   const edge = `\\p{L}\\p{N}#+${joiners}`;
-  return new RegExp(`(?<![${edge}])(?:[הבלמושכ]{1,2})?${escaped}(?![${edge}])`, "giu");
+  const notBefore = NOT_BEFORE[n] ? `(?!${NOT_BEFORE[n]})` : "";
+  return new RegExp(`(?<![${edge}])(?:[הבלמושכ]{1,2})?${escaped}(?![${edge}])${notBefore}`, "giu");
+}
+
+/**
+ * A term that is the first word of a different skill. "java script" is how a
+ * good share of the CVs write JavaScript, and each of them counted as Java.
+ */
+const NOT_BEFORE: Record<string, string> = {
+  java: "[\\s-]*script",
+};
+
+/**
+ * `word` is `term` with one letter added, dropped, or two neighbours swapped —
+ * "cobole", "pyhton", "פיתון". A changed letter is deliberately not accepted:
+ * that is how "reach" becomes React and "string" becomes Spring.
+ */
+function isTypoOf(word: string, term: string): boolean {
+  if (word === term) return false;
+  const [short, long] = word.length <= term.length ? [word, term] : [term, word];
+  if (long.length - short.length > 1) return false;
+  let i = 0;
+  while (i < short.length && short[i] === long[i]) i++;
+  if (long.length === short.length) {
+    return (
+      i < short.length - 1 &&
+      short[i] === long[i + 1] &&
+      short[i + 1] === long[i] &&
+      short.slice(i + 2) === long.slice(i + 2)
+    );
+  }
+  return short.slice(i) === long.slice(i + 1);
 }
 
 function mentions(haystack: string, needle: string): boolean {
@@ -296,6 +328,22 @@ export function extractRequirement(text: string): ExtractedRequirement {
     }
   }
 
+  // What is left may be a skill with a slip of the keyboard: "cobole" found
+  // nobody, though twenty-five CVs say COBOL.
+  for (const word of unconsumed.split(/[\s,.;:()[\]{}"'`|/\\]+/)) {
+    const forms = [word, word.replace(HEBREW_PREFIX, "")].filter((f) => f.length >= 5 && !STOPWORDS.has(f));
+    const hit = vocabulary.find(({ needle }) => {
+      const n = norm(needle);
+      return n.length >= 5 && !n.includes(" ") && forms.some((f) => isTypoOf(f, n));
+    });
+    if (!hit) continue;
+    unconsumed = unconsumed.replace(word, " ".repeat(word.length));
+    const isTech =
+      (TECHNOLOGIES as readonly string[]).includes(hit.canonical) || EXTRA_TECHNOLOGIES.includes(hit.canonical);
+    const list = isTech ? technologies : programmingLanguages;
+    if (!list.includes(hit.canonical)) list.push(hit.canonical);
+  }
+
   let seniority: string | null = null;
   for (const [re, value] of SENIORITY_HINTS) {
     if (re.test(text)) {
@@ -337,7 +385,7 @@ export function extractRequirement(text: string): ExtractedRequirement {
  */
 const STOPWORDS = new Set(
   `דרוש דרושה דרושים דרושות מפתח מפתחת מפתחים מפתחות מתכנת מתכנתת עבור חברה חברת משרה משרת
-   מלאה חלקית ניסיון שנות שנים שנה לפחות מעל יתרון חובה ידע הכרות היכרות עבודה עובדת צוות
+   מלאה חלקית ניסיון נסיון תעסוקתי מקצועי שנות שנים שנה לפחות מעל יתרון חובה ידע הכרות היכרות עבודה עובדת צוות
    בצוות סביבת סביבה תחום בתחום אזור באזור מרחוק היברידי משרדי בעלת יכולת ראש יסודיות אנגלית
    עברית תואר הנדסאית הנדסאי בוגרת בוגר קורס לימודים תפקיד התפקיד כולל וכן וגם עם על של את
    אנחנו אנו מחפשים מחפשות למשרה למשרד לחברה גדולה מובילה צומחת בתל אביב ירושלים מרכז
@@ -513,12 +561,18 @@ export function scoreCandidate(
   // Chana sends these lists to employers, so every match must show its
   // source: which part of the CV it came from, or her card — never a bare score.
   const evidence: MatchEvidence[] = [];
-  let experienceHits = 0;
+  // A card that says "ללא ניסיון" has no employment history, whatever heading
+  // the final project was written under.
+  const neverWorked = (candidate.experience_years ?? "").includes("ללא");
+  /** How many of the skills asked for appear in a job she held. */
+  let experienceTerms = 0;
 
   /** Records the match and returns what it is worth, 0–1, by where it sits. */
   const cite = (term: string, listed: boolean, needles: string[]): number => {
-    const { section, quote, times } = locate(needles);
-    if (section === "experience") experienceHits += times;
+    const found = locate(needles);
+    const { quote, times } = found;
+    const section = found.section === "experience" && neverWorked ? "projects" : found.section;
+    if (section === "experience") experienceTerms += 1;
     if (section) {
       evidence.push({ term, source: "cv", quote, section });
       // A technology named again and again in the jobs she held is her trade,
@@ -546,6 +600,10 @@ export function scoreCandidate(
     0,
   );
   const unknownValue = matchedUnknown.reduce((sum, t) => sum + cite(t, false, [t]), 0);
+  // Counted here, before spoken languages are cited: "אנגלית" in a job
+  // description is not the experience the employer asked about.
+  const skillsInExperience = experienceTerms;
+  const skillsAsked = req.programmingLanguages.length + req.technologies.length + (req.unknownTerms.length ? 1 : 0);
 
   let score = 0;
   let max = 0;
@@ -641,8 +699,10 @@ export function scoreCandidate(
     matchedTechnologies: [...matchedLangs, ...matchedTechnologies, ...matchedUnknown, ...matchedSpoken],
     missingTechnologies: [...missingLangs, ...missingTechnologies],
     evidence,
-    // At least one of the things asked for appears in a job she held.
-    experienceMatch: experienceHits > 0,
+    // The skills asked for appear in a job she held: one of them when one or
+    // two were asked, a third of them when the requirement lists many.
+    experienceMatch: skillsInExperience >= Math.max(1, skillsAsked <= 2 ? 1 : Math.ceil(skillsAsked / 3)),
+    experienceTerms: skillsInExperience,
   };
 }
 
@@ -755,6 +815,7 @@ function directLookup(candidates: Candidate[], text: string): MatchResult[] {
       missingTechnologies: [],
       evidence: [inIdentity ? { term: q, source: "fields" } : { term: q, source: "cv", quote }],
       experienceMatch: false,
+      experienceTerms: 0,
     });
   }
   return hits.sort((a, b) => b.score - a.score);
@@ -791,7 +852,15 @@ export function matchCandidates(
   const ranked = candidates
     .map((c) => scoreCandidate(c, requirement))
     .filter((r): r is MatchResult => r !== null)
-    .sort((a, b) => b.score - a.score);
+    // When experience was asked for, the ones who worked with it come first —
+    // otherwise the display limit could cut them off in favour of a fresher
+    // profile that only studied it.
+    .sort(
+      (a, b) =>
+        (requirement.experienceRequested
+          ? Number(b.experienceMatch) - Number(a.experienceMatch) || b.experienceTerms - a.experienceTerms
+          : 0) || b.score - a.score,
+    );
 
   const relevant = ranked.filter((r) => isRelevant(r, requirement));
   const fallback = relevant.length === 0 && ranked.length > 0;

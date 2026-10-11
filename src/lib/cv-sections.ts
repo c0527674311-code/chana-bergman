@@ -15,29 +15,58 @@ export type CvSection = "experience" | "skills" | "projects" | "education" | "ot
 const HEADINGS: [CvSection, RegExp][] = [
   [
     "experience",
-    /^(ניסיון\s*(תעסוקתי|מקצועי|בעבודה|רלוונטי)?|(תעסוקתי|מקצועי)\s*ניסיון|היסטוריה\s*תעסוקתית|תעסוקתית\s*היסטוריה|תעסוקה|מקומות\s*עבודה|עבודה\s*מקומות|work\s*experience|professional\s*experience|experience|employment(\s*history)?)(?![\p{L}\p{N}])/iu,
+    // "נסיון" without the yod is as common as with it, in CVs and in what Chana types.
+    /^(ני?סיון\s*(תעסוקתי|מקצועי|בעבודה|רלוונטי|מעשי|בתעשייה)?|(תעסוקתי|מקצועי|מעשי)\s*ני?סיון|רקע\s*(תעסוקתי|מקצועי)|היסטוריה\s*תעסוקתית|תעסוקתית\s*היסטוריה|תעסוקה|מקומות\s*עבודה|עבודה\s*מקומות|work\s*(experience|history)|professional\s*(experience|background)|relevant\s*experience|experience|employment(\s*history)?|career(\s*history)?)(?![\p{L}\p{N}])/iu,
   ],
   [
     "education",
-    /^(השכלה(\s*(וקורסים|והכשרה|פורמלית))?|(וקורסים|פורמלית)\s*השכלה|לימודים|הכשרה(\s*מקצועית)?|קורסים|תעודות|education|courses?|academic(\s*background)?|training|certifications?)(?![\p{L}\p{N}])/iu,
+    /^(השכלה(\s*(וקורסים|והכשרה|והכשרות|והסמכות|פורמלית|אקדמית))?|(וקורסים|פורמלית)\s*השכלה|לימודים|הכשרה(\s*מקצועית)?|הכשרות|קורסים(\s*(והסמכות|נוספים|והכשרות))?|הסמכות|תעודות|education|courses?|academic(\s*background)?|training|certifications?|certificates?)(?![\p{L}\p{N}])/iu,
   ],
   [
     "skills",
-    /^(כישורים(\s*(טכניים|מקצועיים))?|(טכניים|מקצועיים)\s*כישורים|ידע\s*מקצועי|מקצועי\s*ידע|מיומנויות|טכנולוגיות|שפות\s*תכנות|תכנות\s*שפות|technical\s*skills|skills|technologies|tech\s*stack|expertise)(?![\p{L}\p{N}])/iu,
+    /^(כישורים(\s*(טכניים|מקצועיים|טכנולוגיים))?|(טכניים|מקצועיים)\s*כישורים|ידע\s*(מקצועי|טכני|טכנולוגי|בתוכנות|במחשבים)|(מקצועי|טכני|טכנולוגי)\s*ידע|מיומנויות(\s*(טכניות|מקצועיות))?|טכנולוגיות|כלים(\s*וטכנולוגיות)?|שפות(\s*(תכנות|פיתוח))?|תכנות\s*שפות|סביבות\s*(עבודה|פיתוח)|בסיסי\s*נתונים|מסדי\s*נתונים|מערכות\s*הפעלה|יישומי\s*מחשב|(technical|professional|core|key|programming|computer|hard)\s*(skills|knowledge)|skills|technologies|tools(\s*(and|&)\s*technologies)?|tech(nical)?\s*stack|expertise|(programming\s*)?languages|databases?|operating\s*systems|frameworks)(?![\p{L}\p{N}])/iu,
   ],
-  ["projects", /^(פרויקטים|פרוייקטים|projects?|portfolio)(?![\p{L}\p{N}])/iu],
+  [
+    "projects",
+    /^((פרויקטים|פרוייקטים|פרויקט|פרוייקט)(\s*(נבחרים|גמר|אישיים|עצמאיים|סיום|בלימודים))?|(selected|personal|academic|side|final|key)\s*projects?|projects?|portfolio)(?![\p{L}\p{N}])/iu,
+  ],
+  [
+    // Not a part worth ranking by — but it ends the part before it. Without
+    // these, the hobbies and the recommendations after the last job were read
+    // as more of that job.
+    "other",
+    /^(פרופיל(\s*(מקצועי|אישי))?|תמצית(\s*מקצועית)?|תקציר(\s*מקצועי)?|אודות(יי)?|קצת\s*עליי?|על\s*עצמי|פרטים\s*אישיים|פרטי\s*(קשר|התקשרות)|תכונות(\s*אישיות)?|כישורים\s*אישיים|ממליצים|המלצות|שונות|התנדבות|תחביבים|שירות\s*(צבאי|לאומי)|(professional\s*)?(summary|profile)|about(\s*me)?|objective|contact(\s*(info|details))?|personal\s*(details|info(rmation)?|skills)|soft\s*skills|references|recommendations|volunteering|volunteer(\s*work)?|hobbies|interests|military\s*service|national\s*service|additional(\s*information)?)(?![\p{L}\p{N}])/iu,
+  ],
 ];
 
-/** A short line that is the heading itself, not a sentence that mentions it. */
-function headingOf(line: string): CvSection | null {
+type Heading = { section: CvSection; rest: string };
+
+/**
+ * The heading a line opens with, and whatever shares the line with it.
+ *
+ * Text pulled out of a two-column PDF puts the heading and the first entry on
+ * one line — "ניסיון מקצועי          2019 - היום: מפתחת תוכנה…" — so a rule
+ * that only accepted a short line of its own missed whole employment histories.
+ */
+function headingOf(line: string): Heading | null {
   const clean = line.trim().replace(/^[•*\-–—\s]+/, "");
-  if (!clean || clean.length > 45) return null;
+  if (!clean) return null;
+  // "כישורים אישיים" is not a skills list; the more specific heading wins.
+  let best: { section: CvSection; length: number } | null = null;
   for (const [section, pattern] of HEADINGS) {
     const m = pattern.exec(clean);
-    // The heading has to be most of the line: "ניסיון תעסוקתי:" is a heading,
-    // "בעלת 2 שנות ניסיון בפיתוח" is a sentence.
-    if (m && (m[0].length / clean.length >= 0.45 || /[:：]\s*$/.test(clean))) return section;
+    if (m && (!best || m[0].length > best.length)) best = { section, length: m[0].length };
   }
+  if (!best) return null;
+  const after = clean.slice(best.length);
+  // The heading alone on its line: "ניסיון תעסוקתי:" is a heading,
+  // "בעלת 2 שנות ניסיון בפיתוח" is a sentence.
+  if (clean.length <= 45 && (best.length / clean.length >= 0.45 || /[:：]\s*$/.test(clean))) {
+    return { section: best.section, rest: "" };
+  }
+  // The heading, then a colon or a column gap, then the content.
+  const gap = /^\s*[:：]\s*|^(?:\s{2,}|\t)\s*/.exec(after);
+  if (gap) return { section: best.section, rest: after.slice(gap[0].length) };
   return null;
 }
 
@@ -53,7 +82,8 @@ export function splitCvSections(text: string): CvSections {
   for (const line of text.split("\n")) {
     const heading = headingOf(line);
     if (heading) {
-      current = heading;
+      current = heading.section;
+      if (heading.rest) sections[current] += heading.rest + "\n";
       continue;
     }
     sections[current] += line + "\n";
@@ -80,5 +110,5 @@ export const SECTION_LABEL: Record<CvSection, string> = {
 
 /** Does the requirement ask for hands-on experience, rather than knowledge? */
 export function asksForExperience(text: string): boolean {
-  return /(ניסיון|מנוס(ה|ות|ים)|עבד(ה|ו|תי)?\s|hands[\s-]?on|experience|worked\s+with|years?\s+of)/i.test(text);
+  return /(ני?סיון|מנוס(ה|ות|ים)|עבד(ה|ו|תי)?\s|hands[\s-]?on|experience|worked\s+with|years?\s+of)/i.test(text);
 }

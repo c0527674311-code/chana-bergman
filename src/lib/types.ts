@@ -88,8 +88,10 @@ export type MatchResult = {
   missingTechnologies: string[];
   /** Where each match came from — her fields, or a line quoted from the CV. */
   evidence: MatchEvidence[];
-  /** True when something the requirement asked for appears in her employment history. */
+  /** True when the skills the requirement asked for appear in her employment history. */
   experienceMatch: boolean;
+  /** How many of those skills appear there — the more, the higher she ranks. */
+  experienceTerms: number;
 };
 
 export type MatchEvidence = {
