@@ -4,37 +4,29 @@ import { adminConfigured, createAdminClient } from "@/lib/supabase/admin";
 import type { MatchEvidence } from "@/lib/types";
 
 /**
- * A one-hour download link to each candidate's current CV. Chana forwards
- * these to employers, so the list without the files was only half an answer.
+ * Which candidates have a CV on file. The link itself points at this site
+ * (/api/admin/cv-file), not at supabase.co: Chana's filtered connection
+ * blocks that host, so signed links opened to nothing.
  */
-async function currentCvLinks(candidateIds: string[]): Promise<Map<string, { url: string; name: string }>> {
-  const links = new Map<string, { url: string; name: string }>();
-  if (!candidateIds.length || !adminConfigured()) return links;
+async function currentCvNames(candidateIds: string[]): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  if (!candidateIds.length || !adminConfigured()) return names;
   try {
     const admin = createAdminClient();
-    const docs: { candidate_id: string; storage_path: string; file_name: string }[] = [];
     for (let i = 0; i < candidateIds.length; i += 100) {
       const { data } = await admin
         .from("cv_documents")
-        .select("candidate_id, storage_path, file_name")
+        .select("candidate_id, file_name")
         .in("candidate_id", candidateIds.slice(i, i + 100))
         .eq("is_current", true);
-      docs.push(...(data ?? []));
-    }
-    if (!docs.length) return links;
-    const { data: signed } = await admin.storage
-      .from("cvs")
-      .createSignedUrls(docs.map((d) => d.storage_path), 60 * 60);
-    for (const s of signed ?? []) {
-      const doc = docs.find((d) => d.storage_path === s.path);
-      if (doc && s.signedUrl) {
-        links.set(doc.candidate_id, { url: s.signedUrl, name: doc.file_name.split("/").pop() ?? doc.file_name });
+      for (const d of data ?? []) {
+        names.set(d.candidate_id as string, (d.file_name as string).split("/").pop() ?? "קורות חיים");
       }
     }
   } catch (err) {
-    console.error("cv links failed:", err);
+    console.error("cv list failed:", err);
   }
-  return links;
+  return names;
 }
 
 /** One ranked candidate, as the match screen shows her. */
@@ -63,6 +55,8 @@ export type MatchRow = {
   evidence: MatchEvidence[];
   /** True when the requirement's technology appears in her employment history. */
   experienceMatch: boolean;
+  /** Years of work counted from the dates in her CV. */
+  datedYears: number | null;
   /** Her current CV file: a link that works for an hour, or null when there is no file. */
   cvUrl: string | null;
   cvName: string | null;
@@ -98,7 +92,7 @@ export async function runMatch(
   if (failed) return { error: LOAD_ERROR_MESSAGE };
 
   const { requirement, results, relevantCount, fallback, lookup } = matchCandidates(candidates, text, limit);
-  const cvs = await currentCvLinks(results.map((r) => r.candidate.id));
+  const cvs = await currentCvNames(results.map((r) => r.candidate.id));
   return {
     requirement,
     total: candidates.length,
@@ -127,8 +121,9 @@ export async function runMatch(
       missing: r.missingTechnologies,
       evidence: r.evidence,
       experienceMatch: r.experienceMatch,
-      cvUrl: cvs.get(r.candidate.id)?.url ?? null,
-      cvName: cvs.get(r.candidate.id)?.name ?? null,
+      datedYears: r.datedYears,
+      cvUrl: cvs.has(r.candidate.id) ? `/api/admin/cv-file?candidate=${r.candidate.id}` : null,
+      cvName: cvs.get(r.candidate.id) ?? null,
     })),
   };
 }

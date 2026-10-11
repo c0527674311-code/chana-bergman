@@ -92,6 +92,8 @@ export type MatchResult = {
   experienceMatch: boolean;
   /** How many of those skills appear there — the more, the higher she ranks. */
   experienceTerms: number;
+  /** Years of work counted from the dates in her CV, when they are there. */
+  datedYears: number | null;
 };
 
 export type MatchEvidence = {

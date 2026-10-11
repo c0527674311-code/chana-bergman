@@ -9,6 +9,7 @@ import {
 import { EXTRA_TECHNOLOGIES, EXTRA_TERMS } from "@/lib/data/tech-terms";
 import {
   asksForExperience,
+  yearsFromExperience,
   SECTION_WEIGHT,
   splitCvSections,
   type CvSection,
@@ -248,6 +249,10 @@ export type ExtractedRequirement = {
   /** Every region the requirement names — "בשרון או במרכז" is both. */
   regions: string[];
   minYears: number | null;
+  /** "בין שנתיים לחמש", "עד 3 שנים" — the top of the range she will consider. */
+  maxYears: number | null;
+  /** "פרקטיקום 2026" — that cohort only. */
+  practicumYear: number | null;
 };
 
 /** Hebrew number words written before "שנים"/"שנות". */
@@ -269,6 +274,56 @@ const YEAR_WORDS: Record<string, number> = {
  * Every phrasing below is collected and the earliest one in the text wins —
  * "לפחות 5 שנות ניסיון, מתוכן שנתיים בניהול" asks for 5, not 2.
  */
+/**
+ * The range of experience the requirement will accept.
+ *
+ * "בין שנתיים לחמש", "עד 3 שנים", "לא מעל 5" — Chana has roles that cannot pay
+ * for ten years, so the top of the range matters as much as the bottom.
+ */
+function extractYearRange(text: string): { min: number | null; max: number | null } {
+  const t = text.replace(/[\u0591-\u05C7]/g, "");
+  const WORD: Record<string, number> = { שנה: 1, שנתיים: 2, שלוש: 3, שלש: 3, ארבע: 4, חמש: 5, שש: 6, שבע: 7, שמונה: 8, תשע: 9, עשר: 10 };
+  const num = (raw: string) => (/^\d/.test(raw) ? Number(raw) : WORD[raw.replace(/^[לבמ]/, "")] ?? NaN);
+  const N = "(\\d+(?:\\.\\d+)?|שנה|שנתיים|שלוש|שלש|ארבע|חמש|שש|שבע|שמונה|תשע|עשר)";
+
+  let min: number | null = null;
+  let max: number | null = null;
+
+  // "בין שנתיים לחמש", "בין 2 ל-5 שנים"
+  const between = new RegExp(`בין\\s*${N}\\s*(?:שנים|שנות ני?סיון)?\\s*(?:ל|לבין|עד)[-\\s]*${N}`, "iu").exec(t);
+  if (between) {
+    const a = num(between[1]);
+    const b = num(between[2]);
+    if (Number.isFinite(a) && Number.isFinite(b)) {
+      min = Math.min(a, b);
+      max = Math.max(a, b);
+    }
+  }
+
+  // "2-5 שנים", "2 עד 5 שנים"
+  if (max == null) {
+    const range = /(?<![\d.])(\d+(?:\.\d+)?)\s*(?:[-–—]|עד)\s*(\d+(?:\.\d+)?)\s*(?:שנות|שנים|years?)/iu.exec(t);
+    if (range) {
+      min = Math.min(Number(range[1]), Number(range[2]));
+      max = Math.max(Number(range[1]), Number(range[2]));
+    }
+  }
+
+  // "עד 3 שנים", "לא מעל 3 שנים", "מקסימום 4", "לכל היותר 5"
+  if (max == null) {
+    const upper = new RegExp(`(?:עד|לא\\s*(?:מעל|יותר\\s*מ-?)|מקסימום|לכל\\s*היותר|max(?:imum)?|up\\s*to|under)\\s*:?\\s*${N}\\s*(?:שנות|שנים|years?)?`, "iu").exec(t);
+    if (upper && !/עד\s*היום|עד\s*כה/.test(upper[0])) {
+      const v = num(upper[1]);
+      if (Number.isFinite(v)) max = v;
+    }
+  }
+
+  // "עד 3 שנים" names one number, and it is the ceiling — not also the floor.
+  const floor = extractMinYears(t);
+  if (min == null && floor != null && (max == null || floor < max)) min = floor;
+  return { min, max };
+}
+
 function extractMinYears(text: string): number | null {
   // Percentages are job scope ("80% משרה"), never experience. Removed first so
   // no pattern below can read the number.
@@ -376,7 +431,7 @@ export function extractRequirement(text: string): ExtractedRequirement {
   // into a מרכז-only search, and a candidate in the שרון lost the points.
   const regions = REGIONS.filter((r) => mentions(h, r));
 
-  const minYears = extractMinYears(text);
+  const { min: minYears, max: maxYears } = extractYearRange(text);
 
   // "דוברת אנגלית שפת אם" is a requirement like any other, and nothing looked
   // at spoken languages at all — the search came back empty.
@@ -390,7 +445,12 @@ export function extractRequirement(text: string): ExtractedRequirement {
     nativeLanguages,
     experienceRequested: asksForExperience(text),
     // Chana types "פרקטיקום" into the same box; it was read as an ordinary word.
-    practicum: /פרקטיקום|פרקטיקם|diversitech|דיברסיטק|דייברסיטק/i.test(text),
+    practicum: PRACTICUM_ASKED.test(text),
+    practicumYear: PRACTICUM_ASKED.test(text)
+      ? (text.match(/(?:פרקטיקום|פרקטיקות|diversitech|דיברסיטק)[^\n]{0,20}?((?:20)\d{2})/i)?.[1] ??
+         text.match(/((?:20)\d{2})[^\n]{0,20}?(?:פרקטיקום|פרקטיקות|diversitech|דיברסיטק)/i)?.[1] ??
+         null) as unknown as number | null
+      : null,
     unknownTerms:
       technologies.length || programmingLanguages.length || spokenLanguages.length
         ? []
@@ -398,6 +458,7 @@ export function extractRequirement(text: string): ExtractedRequirement {
     seniority,
     regions,
     minYears,
+    maxYears,
   };
 }
 
@@ -486,6 +547,8 @@ function unknownTerms(text: string): string[] {
   }
   return out;
 }
+
+const PRACTICUM_ASKED = /פרקטיקום|פרקטיקם|פרקטיקות|diversi\s*te(ch|ck)|דיברסיטק|דייברסיטק/i;
 
 /** Lower bound of an experience bucket, for comparing against minYears. */
 function bucketFloor(bucket: string | null): number {
@@ -588,7 +651,12 @@ export function scoreCandidate(
   const evidence: MatchEvidence[] = [];
   // A card that says "ללא ניסיון" has no employment history, whatever heading
   // the final project was written under.
-  const neverWorked = (candidate.experience_years ?? "").includes("ללא");
+  // A practicum graduate whose card still says "ללא ניסיון" or "עד שנה" has
+  // not held a job: the final project under her "ניסיון" heading is the
+  // practicum, even when she did not write the word.
+  const band = candidate.experience_years ?? "";
+  const neverWorked =
+    band.includes("ללא") || (isPracticumGraduate(candidate) && (!band || band.includes("עד שנה")));
   /** How many of the skills asked for appear in a job she held. */
   let experienceTerms = 0;
 
@@ -675,7 +743,7 @@ export function scoreCandidate(
 
   if (req.practicum) {
     max += WEIGHTS.tech;
-    if (isPracticumGraduate(candidate)) {
+    if (isPracticumGraduate(candidate, req.practicumYear)) {
       score += WEIGHTS.tech;
       evidence.push({
         term: candidate.diversitech_year ? `פרקטיקום DiversiTech ${candidate.diversitech_year}` : "פרקטיקום DiversiTech",
@@ -701,24 +769,41 @@ export function scoreCandidate(
     }
   }
 
+  // What the CV's own dates say, which beats a band stored years ago.
+  const datedYears = neverWorked ? 0 : yearsFromExperience(sections.experience);
+  const years = datedYears ?? bucketFloor(candidate.experience_years);
+  const yearsLabel = datedYears != null
+    ? `ותק לפי התאריכים בקו״ח: ${datedYears} שנים`
+    : `ניסיון: ${candidate.experience_years}`;
+
   if (req.minYears != null) {
     max += WEIGHTS.years;
-    if (bucketFloor(candidate.experience_years) >= req.minYears) {
+    if (years >= req.minYears) {
       score += WEIGHTS.years;
-      evidence.push({ term: `ניסיון: ${candidate.experience_years}`, source: "fields" });
+      evidence.push({ term: yearsLabel, source: datedYears != null ? "cv" : "fields", section: datedYears != null ? "experience" : undefined });
+    }
+  }
+  if (req.maxYears != null) {
+    max += WEIGHTS.years;
+    // Over the ceiling she will not pay for; under it is what she asked for.
+    if (years <= req.maxYears) {
+      score += WEIGHTS.years;
+      if (req.minYears == null) {
+        evidence.push({ term: yearsLabel, source: datedYears != null ? "cv" : "fields", section: datedYears != null ? "experience" : undefined });
+      }
     }
   }
 
   // Nothing in the requirement to measure against — not a match, just noise.
   if (max === 0) return null;
 
-  // A small nudge for recently-updated profiles, so stale records sink.
-  max += WEIGHTS.freshness;
+  // A recently-updated profile wins a tie, but it is not a criterion: adding it
+  // to the total meant a candidate who met every requirement still read 99%.
   const monthsOld =
     (Date.now() - new Date(candidate.updated_at).getTime()) / (1000 * 60 * 60 * 24 * 30);
-  if (monthsOld < 12) score += WEIGHTS.freshness * (1 - monthsOld / 12);
+  const freshness = monthsOld < 12 ? 1 - monthsOld / 12 : 0;
 
-  const pct = Math.round((score / max) * 100);
+  const pct = Math.min(100, Math.round((score / max) * 100 + freshness * 0.4));
   if (pct <= 0) return null;
 
   return {
@@ -739,12 +824,22 @@ export function scoreCandidate(
     // two were asked, a third of them when the requirement lists many.
     experienceMatch: skillsInExperience >= Math.max(1, skillsAsked <= 2 ? 1 : Math.ceil(skillsAsked / 3)),
     experienceTerms: skillsInExperience,
+    datedYears,
   };
 }
 
-/** Marked on her card, or filed under the practicum before that field existed. */
-function isPracticumGraduate(c: Candidate): boolean {
-  return Boolean(c.diversitech_practicum) || c.institution === "פרקטיקום";
+/**
+ * Marked on her card, or filed under the practicum before that field existed.
+ * A year narrows it to that cohort — "כל הבוגרות האחרונות" is 2026.
+ */
+function isPracticumGraduate(c: Candidate, year: number | null = null): boolean {
+  const graduate = Boolean(c.diversitech_practicum) || c.institution === "פרקטיקום";
+  if (!graduate) return false;
+  if (year == null) return true;
+  if (c.diversitech_year) return c.diversitech_year === Number(year);
+  // No year on her card: the CV may still say it next to the practicum.
+  return new RegExp(`(?:פרקטיקום|פרקטיקות|diversi)[^\\n]{0,30}${year}|${year}[^\\n]{0,30}(?:פרקטיקום|פרקטיקות|diversi)`, "i")
+    .test(c.search_text ?? "");
 }
 
 /** One human-readable line explaining the match — shown next to every result. */
@@ -789,7 +884,12 @@ function buildReason(
 function isRelevant(result: MatchResult, req: ExtractedRequirement): boolean {
   const asked = req.programmingLanguages.length + req.technologies.length;
   // "בוגרת פרקטיקום" is a yes or no, not a point on a scale.
-  if (req.practicum && !isPracticumGraduate(result.candidate)) return false;
+  if (req.practicum && !isPracticumGraduate(result.candidate, req.practicumYear)) return false;
+
+  // A ceiling is a decision, not a preference: a role that cannot pay for ten
+  // years should not be shown ten years.
+  if (req.maxYears != null && result.datedYears != null && result.datedYears > req.maxYears) return false;
+  if (req.minYears != null && result.datedYears != null && result.datedYears + 0.5 < req.minYears) return false;
 
   // "אנגלית שפת אם" asks for the level, not just the language: knowing English
   // is a near miss, not a match.
@@ -816,7 +916,8 @@ function hasSignals(req: ExtractedRequirement): boolean {
       req.regions.length ||
       req.seniority ||
       req.practicum ||
-      req.minYears != null,
+      req.minYears != null ||
+      req.maxYears != null,
   );
 }
 
@@ -861,6 +962,7 @@ function directLookup(candidates: Candidate[], text: string): MatchResult[] {
       evidence: [inIdentity ? { term: q, source: "fields" } : { term: q, source: "cv", quote }],
       experienceMatch: false,
       experienceTerms: 0,
+      datedYears: null,
     });
   }
   return hits.sort((a, b) => b.score - a.score);

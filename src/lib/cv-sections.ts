@@ -82,7 +82,7 @@ function headingOf(line: string): Heading | null {
  * (פרקטיקום) | Sola Security"), so the entry has to be recognised there: 46 of
  * the 445 CVs in the pool do exactly that.
  */
-const PRACTICUM = /פרקטיקום|פרקטיקם|דיברסיטק|diversi\s*te(ch|ck)|practicum|internship|\bintern\b|trainee|סטאז['׳]?(?![\p{L}])|התמחות|מתרגלת|חונכת/iu;
+const PRACTICUM = /פרקטיקום|פרקטיקם|פרקטיקות|פרקטיקנטית|דיברסיטק|diversi\s*te(ch|ck)|practicum|internship|\bintern\b|trainee|סטאז['׳]?(?![\p{L}])|התמחות|מתרגלת|חונכת/iu;
 
 export function isPracticumEntry(text: string): boolean {
   return PRACTICUM.test(text);
@@ -163,6 +163,45 @@ export const SECTION_LABEL: Record<CvSection, string> = {
   education: "מהשכלה / קורסים",
   other: "מקורות החיים",
 };
+
+/**
+ * How long she has actually been working, counted from the dates in her
+ * employment history.
+ *
+ * The stored band goes stale: a CV that said "7 שנים" when it was sent three
+ * years ago still said seven, and Chana needs today's number. "2022 – היום"
+ * read in 2026 is four years.
+ */
+export function yearsFromExperience(experience: string, now = new Date()): number | null {
+  const thisYear = now.getFullYear();
+  const YEAR = /(?:19|20)\d{2}/g;
+  const ONGOING = /היום|כיום|הווה|present|current|now|עד\s*היום/i;
+
+  let earliest: number | null = null;
+  let latest: number | null = null;
+  let ongoing = false;
+
+  for (const entry of splitEntries(experience)) {
+    // Only the entry's own header line carries its dates. A year mentioned
+    // inside the description ("מערכת שעבדה מאז 2018", a course year) is not
+    // when the job started, and counting it stretched people's seniority.
+    const header = entry.split("\n").find((l) => l.trim()) ?? "";
+    const years = (header.match(YEAR) ?? [])
+      .map(Number)
+      .filter((y) => y >= 1980 && y <= thisYear + 1);
+    if (!years.length) continue;
+    const min = Math.min(...years);
+    const max = Math.max(...years);
+    earliest = earliest == null ? min : Math.min(earliest, min);
+    latest = latest == null ? max : Math.max(latest, max);
+    if (ONGOING.test(entry)) ongoing = true;
+  }
+
+  if (earliest == null) return null;
+  const end = ongoing ? thisYear : Math.max(latest ?? earliest, earliest);
+  const years = end - earliest;
+  return years >= 0 && years <= 50 ? years : null;
+}
 
 /** Does the requirement ask for hands-on experience, rather than knowledge? */
 export function asksForExperience(text: string): boolean {

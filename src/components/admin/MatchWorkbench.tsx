@@ -147,6 +147,21 @@ export function MatchWorkbench({
           >
             נסי עם דוגמה
           </button>
+          {text.trim() && (
+            <button
+              type="button"
+              onClick={() => {
+                setText("");
+                setRows(null);
+                setExtracted(null);
+                setSelected(new Set());
+                setError(null);
+              }}
+              className="focus-brand rounded-full px-3 py-2 text-[14px] text-ink/60 hover:bg-canvas"
+            >
+              ניקוי
+            </button>
+          )}
         </div>
         {error && (
           <p role="alert" className="mt-3 rounded-2xl bg-red-50 px-5 py-3 text-[14px] font-medium text-red-700">
@@ -323,6 +338,16 @@ export function MatchWorkbench({
                           <span className="text-[13px] text-ink/55">
                             {r.institution}
                             {r.cohort ? ` · ${r.cohort}` : ""}
+                          </span>
+                        )}
+                        {/* Counted from the dates she wrote, not from a band
+                            she filled in three years ago. */}
+                        {r.datedYears != null && (
+                          <span
+                            className="rounded-full bg-canvas px-2 py-0.5 text-[12px] font-semibold text-ink/70"
+                            title="מחושב לפי התאריכים בפרק הניסיון התעסוקתי"
+                          >
+                            {r.datedYears === 0 ? "ללא ניסיון תעסוקתי" : `ותק ${r.datedYears} שנים`}
                           </span>
                         )}
                         {mailBlockReason(r) && (
