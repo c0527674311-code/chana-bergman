@@ -100,6 +100,6 @@ export type MatchEvidence = {
   source: "fields" | "cv";
   /** A short quote around the match, when it comes from the CV text. */
   quote?: string;
-  /** Which part of the CV it came from — employment history, studies, skills list. */
-  section?: "experience" | "skills" | "projects" | "education" | "other";
+  /** Which part of the CV it came from — employment history, practicum, studies, skills list. */
+  section?: "experience" | "practicum" | "skills" | "projects" | "education" | "other";
 };

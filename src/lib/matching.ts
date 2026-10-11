@@ -548,12 +548,13 @@ export function scoreCandidate(
   const sections = splitCvSections(candidate.search_text ?? "");
   const sectionText = {
     experience: normText(sections.experience),
+    practicum: normText(sections.practicum),
     skills: normText(sections.skills),
     other: normText(sections.other),
     projects: normText(sections.projects),
     education: normText(sections.education),
   } satisfies Record<CvSection, string>;
-  const SECTION_ORDER: CvSection[] = ["experience", "skills", "other", "projects", "education"];
+  const SECTION_ORDER: CvSection[] = ["experience", "skills", "other", "practicum", "projects", "education"];
 
   /** Where a term appears, how often in the employment history, and a quote. */
   const locate = (needles: string[]) => {
@@ -595,7 +596,7 @@ export function scoreCandidate(
   const cite = (term: string, listed: boolean, needles: string[]): number => {
     const found = locate(needles);
     const { quote, times } = found;
-    const section = found.section === "experience" && neverWorked ? "projects" : found.section;
+    const section = found.section === "experience" && neverWorked ? "practicum" : found.section;
     if (section === "experience") experienceTerms += 1;
     if (section) {
       evidence.push({ term, source: "cv", quote, section });

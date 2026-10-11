@@ -10,7 +10,13 @@
  * often comes back as "תעסוקתי ניסיון".
  */
 
-export type CvSection = "experience" | "skills" | "projects" | "education" | "other";
+export type CvSection =
+  | "experience"
+  | "practicum"
+  | "skills"
+  | "projects"
+  | "education"
+  | "other";
 
 const HEADINGS: [CvSection, RegExp][] = [
   [
@@ -70,10 +76,43 @@ function headingOf(line: string): Heading | null {
   return null;
 }
 
+/**
+ * A practicum is training, not a job — Chana's rule, and the employers'.
+ * Candidates write it inside the employment history ("2026 | מפתחת Backend
+ * (פרקטיקום) | Sola Security"), so the entry has to be recognised there: 46 of
+ * the 445 CVs in the pool do exactly that.
+ */
+const PRACTICUM = /פרקטיקום|פרקטיקם|דיברסיטק|diversi\s*te(ch|ck)|practicum|internship|\bintern\b|trainee|סטאז['׳]?(?![\p{L}])|התמחות|מתרגלת|חונכת/iu;
+
+export function isPracticumEntry(text: string): boolean {
+  return PRACTICUM.test(text);
+}
+
+/**
+ * The employment history, split into one job per entry: a blank line, or a
+ * line that opens with a year, starts a new one. Without this, a practicum
+ * line would disqualify the real job written under it.
+ */
+export function splitEntries(text: string): string[] {
+  const entries: string[] = [];
+  let current = "";
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    const startsEntry = /^[•*\-–—\s]*(?:(?:19|20)\d{2}|\d{1,2}\/(?:19|20)\d{2})/.test(line);
+    if ((!line || startsEntry) && current.trim()) {
+      entries.push(current);
+      current = "";
+    }
+    current += raw + "\n";
+  }
+  if (current.trim()) entries.push(current);
+  return entries;
+}
+
 export type CvSections = Record<CvSection, string>;
 
 export function splitCvSections(text: string): CvSections {
-  const sections: CvSections = { experience: "", skills: "", projects: "", education: "", other: "" };
+  const sections: CvSections = { experience: "", practicum: "", skills: "", projects: "", education: "", other: "" };
   if (!text) return sections;
 
   // Before the first heading sits the name, the contact line and the profile
@@ -88,6 +127,17 @@ export function splitCvSections(text: string): CvSections {
     }
     sections[current] += line + "\n";
   }
+
+  // Pull the practicum entries out of the employment history.
+  if (sections.experience.trim()) {
+    const entries = splitEntries(sections.experience);
+    const jobs = entries.filter((e) => !isPracticumEntry(e));
+    const training = entries.filter(isPracticumEntry);
+    if (training.length) {
+      sections.experience = jobs.join("");
+      sections.practicum += training.join("");
+    }
+  }
   return sections;
 }
 
@@ -95,6 +145,7 @@ export function splitCvSections(text: string): CvSections {
 export const SECTION_WEIGHT: Record<CvSection, number> = {
   experience: 1,
   skills: 0.9,
+  practicum: 0.55,
   other: 0.75,
   projects: 0.6,
   education: 0.5,
@@ -102,6 +153,7 @@ export const SECTION_WEIGHT: Record<CvSection, number> = {
 
 export const SECTION_LABEL: Record<CvSection, string> = {
   experience: "מניסיון תעסוקתי",
+  practicum: "מפרקטיקום / התמחות — לא ניסיון תעסוקתי",
   skills: "מרשימת הכישורים",
   projects: "מפרויקטים",
   education: "מהשכלה / קורסים",
