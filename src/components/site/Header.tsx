@@ -86,6 +86,11 @@ export function Header({
                 className={cn(
                   "focus-brand rounded-lg text-[15px] transition-colors hover:text-primary",
                   active ? "font-bold text-primary" : "text-ink",
+                  // The CV builder is the way into the pool — it should read as an offer.
+                  "highlight" in item &&
+                    item.highlight &&
+                    !active &&
+                    "rounded-full bg-mint-100 px-3 py-1.5 font-semibold text-navy hover:bg-mint",
                 )}
               >
                 {item.label}

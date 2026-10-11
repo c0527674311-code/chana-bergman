@@ -28,7 +28,8 @@ export const BRAND = {
 export const NAV = [
   { href: "/", label: "בית" },
   { href: "/jobs", label: "משרות" },
-  { href: "/cv-builder", label: "בונה קו״ח" },
+  // Chana's funnel: a candidate who builds a CV here lands in the pool.
+  { href: "/cv-builder", label: "בונה קורות חיים — חינם", highlight: true },
   { href: "/blog", label: "טיפים" },
   { href: "/#contact", label: "צור קשר" },
 ] as const;

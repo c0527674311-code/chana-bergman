@@ -253,6 +253,8 @@ export type ExtractedRequirement = {
   maxYears: number | null;
   /** "פרקטיקום 2026" — that cohort only. */
   practicumYear: number | null;
+  /** "גם קובול וגם ג'אווה" — she means both, not either. */
+  requireAll: boolean;
 };
 
 /** Hebrew number words written before "שנים"/"שנות". */
@@ -445,6 +447,7 @@ export function extractRequirement(text: string): ExtractedRequirement {
     nativeLanguages,
     experienceRequested: asksForExperience(text),
     // Chana types "פרקטיקום" into the same box; it was read as an ordinary word.
+    requireAll: /(?<![\p{L}])גם[^\n]{0,40}וגם(?![\p{L}])|both\s+[^\n]{0,40}\sand\s/iu.test(text),
     practicum: PRACTICUM_ASKED.test(text),
     practicumYear: PRACTICUM_ASKED.test(text)
       ? (text.match(/(?:פרקטיקום|פרקטיקות|diversitech|דיברסיטק)[^\n]{0,20}?((?:20)\d{2})/i)?.[1] ??
@@ -903,6 +906,8 @@ function isRelevant(result: MatchResult, req: ExtractedRequirement): boolean {
   if (!asked) return req.practicum || result.score >= 60;
   const hits = result.matchedTechnologies.length;
   if (!hits) return false;
+  // "גם קובול וגם ג'אווה" is an and, not an or.
+  if (req.requireAll) return result.missingTechnologies.length === 0;
   return asked <= 2 || hits >= Math.ceil(asked / 3);
 }
 

@@ -18,7 +18,6 @@ import {
 } from "@/lib/cv-builder";
 import { cn } from "@/lib/utils";
 
-type Checkout = { mode: "free" } | { mode: "paid"; price: number; url: string };
 
 /* ------------------------------------------------------------------ */
 /* Draft persistence                                                   */
@@ -76,11 +75,9 @@ function subscribeDraft(listener: () => void) {
 
 export function CvBuilder() {
   const { data, template } = useSyncExternalStore(subscribeDraft, readDraft, () => BLANK_DRAFT);
-  const [checkout, setCheckout] = useState<Checkout | null>(null);
   const [joinConsent, setJoinConsent] = useState(false);
   // What was last sent to the pool, so a second download doesn't send it again.
   const savedRef = useRef("");
-  const [payDialog, setPayDialog] = useState<Checkout | null>(null);
   const [scale, setScale] = useState(0.5);
   const [sheetHeight, setSheetHeight] = useState(297 * 3.7795);
   // Client-only flag without setState-in-effect: the print copy is portalled
@@ -94,12 +91,6 @@ export function CvBuilder() {
   const sheetRef = useRef<HTMLDivElement>(null);
 
   // Load the pricing config up front so the button can show the price.
-  useEffect(() => {
-    fetch("/api/cv-builder/checkout")
-      .then((res) => res.json())
-      .then((c: Checkout) => setCheckout(c))
-      .catch(() => setCheckout({ mode: "free" }));
-  }, []);
 
   // Fit the A4 sheet (210mm ≈ 794px) to the preview column width.
   useEffect(() => {
@@ -175,18 +166,7 @@ export function CvBuilder() {
 
   async function download() {
     void saveToPool();
-    let c = checkout;
-    if (!c) {
-      // Clicked before the config loaded — fetch it now, fall back to free.
-      try {
-        c = (await (await fetch("/api/cv-builder/checkout")).json()) as Checkout;
-        setCheckout(c);
-      } catch {
-        c = { mode: "free" };
-      }
-    }
-    if (c.mode === "paid") setPayDialog(c);
-    else window.print();
+    window.print();
   }
 
   // Screen and paper get different copies: the preview fills blanks with
@@ -383,13 +363,7 @@ export function CvBuilder() {
           </label>
           <Button size="lg" withArrow={false} onClick={download} disabled={!ready}>
             הורדת קורות החיים כ-PDF
-            {checkout?.mode === "paid" && ` · ₪${checkout.price}`}
           </Button>
-          {checkout?.mode === "paid" && (
-            <p className="text-center text-[13px] text-ink/55">
-              תשלום חד־פעמי — כל התבניות כלולות בהורדה.
-            </p>
-          )}
           {!ready && (
             <p className="text-center text-[13px] text-ink/55">
               מלאי לפחות שם מלא ודרך התקשרות כדי להוריד.
@@ -406,17 +380,6 @@ export function CvBuilder() {
         </div>
       </div>
 
-      {payDialog?.mode === "paid" && (
-        <PayDialog
-          price={payDialog.price}
-          url={payDialog.url}
-          onClose={() => setPayDialog(null)}
-          onPaid={() => {
-            setPayDialog(null);
-            window.print();
-          }}
-        />
-      )}
 
       {/* What actually gets printed. The on-screen preview lives inside a
           scale() transform and a clipped, fixed-height box; printing that
@@ -434,71 +397,6 @@ export function CvBuilder() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-
-function PayDialog({
-  price,
-  url,
-  onClose,
-  onPaid,
-}: {
-  price: number;
-  url: string;
-  onClose: () => void;
-  onPaid: () => void;
-}) {
-  const [opened, setOpened] = useState(false);
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="pay-title"
-      className="fixed inset-0 z-[60] grid place-items-center bg-navy/40 p-4 backdrop-blur-sm"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="w-full max-w-md rounded-[var(--radius-card)] bg-white p-8 text-center shadow-[var(--shadow-card)]">
-        <h2 id="pay-title" className="text-[22px] font-extrabold text-navy">
-          הורדת קורות החיים
-        </h2>
-        <p className="mt-2 text-[16px] text-ink/75">
-          עלות ההורדה: <strong className="text-navy">₪{price}</strong>
-        </p>
-        <p className="mt-1 text-[14px] text-ink/60">
-          תשלום חד־פעמי שכולל את כל התבניות. התשלום נפתח בעמוד מאובטח — אחרי
-          שסיימת, חזרי לכאן להורדה.
-        </p>
-
-        <div className="mt-6 flex flex-col gap-3">
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => setOpened(true)}
-            className="focus-brand inline-flex h-12 items-center justify-center rounded-full bg-primary text-[15px] font-semibold text-white hover:bg-primary-600"
-          >
-            לתשלום מאובטח ↗
-          </a>
-          <button
-            type="button"
-            onClick={onPaid}
-            disabled={!opened}
-            className="focus-brand inline-flex h-12 items-center justify-center rounded-full border border-mint text-[15px] font-semibold text-navy hover:bg-mint-100 disabled:opacity-40"
-          >
-            שילמתי — להורדה
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="focus-brand rounded-full px-4 py-2 text-[14px] font-semibold text-ink/60 hover:bg-canvas"
-          >
-            ביטול
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 

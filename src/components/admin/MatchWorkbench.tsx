@@ -411,7 +411,7 @@ export function MatchWorkbench({
                   {/* Chana sends this list on; a score alone is not something she can vouch for. */}
                   <details className="-mt-2 mb-1 ps-[76px] pe-3 pb-2">
                     <summary className="focus-brand inline-block cursor-pointer rounded text-[13px] font-semibold text-primary/80 hover:text-primary">
-                      מאיפה ההתאמה?
+                      למה היא ברשימה? (מה נמצא ואיפה)
                     </summary>
                     <ul className="mt-1.5 flex flex-col gap-1 text-[13px] text-ink/75">
                       {r.evidence.length === 0 && <li>לא נמצאה עדות ספציפית — רק ציון כללי.</li>}
