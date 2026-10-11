@@ -118,7 +118,11 @@ export function splitCvSections(text: string): CvSections {
   // Before the first heading sits the name, the contact line and the profile
   // paragraph — worth searching, but it is nobody's employment history.
   let current: CvSection = "other";
-  for (const line of text.split("\n")) {
+  // A bullet is a line break that PDF extraction swallowed: "…ידע מקצועי•שפות
+  // תכנות: C, COBOL…" arrived as one line, so the skills list was read as part
+  // of the job above it and a COBOL line in a skills list looked like a job.
+  const lines = text.replace(/[•●▪◆‣]+/g, "\n").split("\n");
+  for (const line of lines) {
     const heading = headingOf(line);
     if (heading) {
       current = heading.section;
