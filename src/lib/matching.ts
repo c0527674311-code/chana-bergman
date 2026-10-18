@@ -95,6 +95,17 @@ const ALIASES: Record<string, string> = {
   "יוניטי": "Unity",
   "וורדפרס": "WordPress",
   "אוטומציה": "QA Automation",
+  golang: "Go",
+  "גולנג": "Go",
+  "סקאלה": "Scala",
+  "דארט": "Dart",
+  "ראסט": "Rust",
+  "פי אייץ פי": "PHP",
+  "סיי שארפ": "C#",
+  es6: "JavaScript",
+  vb: "VB.NET",
+  "ויזואל בייסיק": "VB.NET",
+  shell: "Bash",
   "web api": "REST API",
   webapi: "REST API",
   swagger: "REST API",
@@ -582,6 +593,9 @@ function bucketFloor(bucket: string | null): number {
 const WEIGHTS = { tech: 5, lang: 6, spoken: 4, seniority: 3, region: 2, years: 3, freshness: 1 };
 
 const CV_ONLY_SPELLINGS: Record<string, string[]> = {
+  // "visual basic" and "vb6" are the same family as VB.NET to an employer.
+  "VB.NET": ["visual basic", "vb6", "vba"],
+  Bash: ["shell scripts", "shell script", "סקריפטים"],
   "REST API": ["restful", "rest apis", "web api", "webapi", "swagger", "openapi"],
   "QA Automation": [
     "בדיקות אוטומטיות",
