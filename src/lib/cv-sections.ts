@@ -176,6 +176,9 @@ export function yearsFromExperience(experience: string, now = new Date()): numbe
   const thisYear = now.getFullYear();
   const YEAR = /(?:19|20)\d{2}/g;
   const ONGOING = /היום|כיום|הווה|present|current|now|עד\s*היום/i;
+  // "2022 – נוכחי" is the common way to write it; only trusted in the header
+  // line, since "המקום הנוכחי" in a description says nothing about dates.
+  const ONGOING_HEADER = /נוכח(?:י|ית)|כעת|עכשיו|עד\s*עכשיו/;
 
   let earliest: number | null = null;
   let latest: number | null = null;
@@ -194,7 +197,7 @@ export function yearsFromExperience(experience: string, now = new Date()): numbe
     const max = Math.max(...years);
     earliest = earliest == null ? min : Math.min(earliest, min);
     latest = latest == null ? max : Math.max(latest, max);
-    if (ONGOING.test(entry)) ongoing = true;
+    if (ONGOING.test(entry) || ONGOING_HEADER.test(header)) ongoing = true;
   }
 
   if (earliest == null) return null;

@@ -169,7 +169,9 @@ function termPattern(needle: string): RegExp | null {
     .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join("[\\s-]+");
   const joiners = !HEBREW.test(n) && n.length <= 2 ? "&\\-" : "&";
-  const edge = `\\p{L}\\p{N}#+${joiners}`;
+  // PDF text often arrives with the spaces gone ("מפתחתcobolבבנק"), so a Latin
+  // term only needs to be clear of other Latin letters, not of Hebrew ones.
+  const edge = HEBREW.test(n) ? `\\p{L}\\p{N}#+${joiners}` : `a-z0-9#+${joiners}`;
   const notBefore = NOT_BEFORE[n] ? `(?!${NOT_BEFORE[n]})` : "";
   return new RegExp(`(?<![${edge}])(?:[הבלמושכ]{1,2})?${escaped}(?![${edge}])${notBefore}`, "giu");
 }
