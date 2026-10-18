@@ -6,7 +6,7 @@ import {
   SPOKEN_LANGUAGES,
   TECHNOLOGIES,
 } from "@/lib/data/options";
-import { EXTRA_TECHNOLOGIES, EXTRA_TERMS } from "@/lib/data/tech-terms";
+import { CONCEPTS, CONCEPT_TERMS, EXTRA_TECHNOLOGIES, EXTRA_TERMS } from "@/lib/data/tech-terms";
 import {
   asksForExperience,
   yearsFromExperience,
@@ -95,6 +95,11 @@ const ALIASES: Record<string, string> = {
   "יוניטי": "Unity",
   "וורדפרס": "WordPress",
   "אוטומציה": "QA Automation",
+  "web api": "REST API",
+  webapi: "REST API",
+  swagger: "REST API",
+  openapi: "REST API",
+  restful: "REST API",
   devops: "DevOps",
   "סייבר": "Cyber Security",
   "אנדרואיד": "Android",
@@ -372,6 +377,11 @@ function extractMinYears(text: string): number | null {
   return hits.reduce((first, h) => (h.index < first.index ? h : first)).years;
 }
 
+const isTechnology = (canonical: string): boolean =>
+  (TECHNOLOGIES as readonly string[]).includes(canonical) ||
+  EXTRA_TECHNOLOGIES.includes(canonical) ||
+  CONCEPT_TERMS.includes(canonical);
+
 /** Pull structured requirements out of a free-text job description. */
 export function extractRequirement(text: string): ExtractedRequirement {
   const h = normText(text);
@@ -393,6 +403,11 @@ export function extractRequirement(text: string): ExtractedRequirement {
       { needle: term, canonical: term },
       ...(aliases ?? []).map((needle) => ({ needle, canonical: term })),
     ]),
+    // Ideas rather than products ("צד שרת", "ניהול גרסאות"): see CONCEPTS.
+    ...CONCEPTS.flatMap(({ term, phrases }) => [
+      { needle: term, canonical: term },
+      ...phrases.map((needle) => ({ needle, canonical: term })),
+    ]),
     ...Object.entries(ALIASES).map(([needle, canonical]) => ({ needle, canonical })),
   ].sort((a, b) => norm(b.needle).length - norm(a.needle).length);
 
@@ -400,7 +415,7 @@ export function extractRequirement(text: string): ExtractedRequirement {
   for (const { needle, canonical } of vocabulary) {
     if (!mentions(unconsumed, needle)) continue;
     unconsumed = blankTerm(unconsumed, needle);
-    if ((TECHNOLOGIES as readonly string[]).includes(canonical) || EXTRA_TECHNOLOGIES.includes(canonical)) {
+    if (isTechnology(canonical)) {
       if (!technologies.includes(canonical)) technologies.push(canonical);
     } else if (!programmingLanguages.includes(canonical)) {
       programmingLanguages.push(canonical);
@@ -417,8 +432,7 @@ export function extractRequirement(text: string): ExtractedRequirement {
     });
     if (!hit) continue;
     unconsumed = unconsumed.replace(word, " ".repeat(word.length));
-    const isTech =
-      (TECHNOLOGIES as readonly string[]).includes(hit.canonical) || EXTRA_TECHNOLOGIES.includes(hit.canonical);
+    const isTech = isTechnology(hit.canonical);
     const list = isTech ? technologies : programmingLanguages;
     if (!list.includes(hit.canonical)) list.push(hit.canonical);
   }
@@ -567,6 +581,27 @@ function bucketFloor(bucket: string | null): number {
 
 const WEIGHTS = { tech: 5, lang: 6, spoken: 4, seniority: 3, region: 2, years: 3, freshness: 1 };
 
+const CV_ONLY_SPELLINGS: Record<string, string[]> = {
+  "REST API": ["restful", "rest apis", "web api", "webapi", "swagger", "openapi"],
+  "QA Automation": [
+    "בדיקות אוטומטיות",
+    "בדיקות אוטומטי",
+    "בדיקה אוטומטית",
+    "תסריטי בדיקה אוטומטיים",
+    "תסריטי בדיקה אוטומטים",
+    "בדיקות אוטומציה",
+    "automated test",
+    "automated tests",
+    "automated testing",
+    "test automation",
+    "automation testing",
+    "selenium",
+    "cypress",
+    "playwright",
+    "appium",
+  ],
+};
+
 /**
  * Every spelling that means the same skill, so a CV written as "ריאקט",
  * "nodejs" or "as400" still matches the canonical term.
@@ -580,6 +615,14 @@ const SPELLINGS = (() => {
   };
   for (const [needle, canonical] of Object.entries(ALIASES)) add(canonical, needle);
   for (const { term, aliases } of EXTRA_TERMS) for (const a of aliases ?? []) add(term, a);
+  // How a CV says it without using the requirement's own word. Kept out of
+  // ALIASES so typing "Selenium" still asks for Selenium, not for all of QA.
+  for (const [canonical, needles] of Object.entries(CV_ONLY_SPELLINGS)) {
+    for (const n of needles) add(canonical, n);
+  }
+  for (const { term, phrases, tools } of CONCEPTS) {
+    for (const n of [...phrases, ...(tools ?? [])]) add(term, n);
+  }
   return map;
 })();
 

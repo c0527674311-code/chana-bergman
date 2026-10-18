@@ -228,3 +228,84 @@ export const EXTRA_TERMS: ExtraTerm[] = [
 
 export const EXTRA_TECHNOLOGIES = EXTRA_TERMS.filter((t) => t.kind === "tech").map((t) => t.term);
 export const EXTRA_PROGRAMMING_LANGUAGES = EXTRA_TERMS.filter((t) => t.kind === "lang").map((t) => t.term);
+
+/**
+ * Things a requirement asks for as an idea rather than a product: "מפתחת צד שרת",
+ * "ניהול גרסאות", "Agile". Left unrecognised, these fell through to a plain text
+ * search, which lists everyone who wrote the word anywhere — a course list as
+ * readily as a job — with no ranking and no "employment only".
+ *
+ * `phrases` are the ways a requirement or a CV names the idea itself. `tools`
+ * are what a CV lists instead of naming it (a Node.js developer never writes
+ * "backend"); they are matched in CV text only, so typing "Git" still asks for
+ * Git and not for everyone who ever used version control.
+ *
+ * Kept apart from EXTRA_TERMS on purpose: the CV scan is only allowed to store
+ * EXTRA_TERMS values on a candidate's card, and an idea is not a skill she has.
+ */
+export type Concept = { term: string; phrases: string[]; tools?: string[] };
+
+export const CONCEPTS: Concept[] = [
+  {
+    term: "Backend",
+    phrases: ["backend", "back end", "back-end", "בקאנד", "בק אנד", "צד שרת", "שרת צד", "server side", "server-side"],
+    tools: ["node.js", "nodejs", "asp.net", "spring boot", "django", "flask", "fastapi", "express.js", "expressjs", "laravel", "web api", "webapi", "microservices"],
+  },
+  {
+    term: "Frontend",
+    phrases: ["frontend", "front end", "front-end", "פרונטאנד", "פרונט אנד", "פרונט", "צד לקוח", "לקוח צד", "client side", "client-side"],
+    tools: ["react", "angular", "vue", "jquery", "bootstrap", "redux", "next.js", "svelte"],
+  },
+  { term: "Full Stack", phrases: ["fullstack", "full-stack", "full stack", "פולסטאק", "פול סטאק", "פולסטק"] },
+  {
+    term: "Agile",
+    phrases: ["agile", "scrum", "סקראם", "kanban", "קנבן", "קאנבאן", "אג'ייל", "אג׳ייל", "אגייל", "ספרינטים", "sprints"],
+  },
+  {
+    term: "Version Control",
+    phrases: ["version control", "source control", "ניהול גרסאות", "ניהול גירסאות", "בקרת גרסאות", "בקרת גירסאות", "ניהול קוד מקור"],
+    tools: ["git", "github", "gitlab", "bitbucket", "svn", "subversion", "tortoisegit", "גיט"],
+  },
+  {
+    term: "Databases",
+    phrases: ["database", "databases", "מסד נתונים", "מסדי נתונים", "בסיס נתונים", "בסיסי נתונים", "מאגרי מידע", "מאגר נתונים"],
+    tools: ["sql", "mysql", "postgresql", "postgres", "sql server", "mssql", "oracle", "mongodb", "nosql", "sqlite", "db2", "redis", "mariadb"],
+  },
+  {
+    term: "Data Structures",
+    phrases: ["מבני נתונים", "data structures", "data structure", "אלגוריתמים", "אלגוריתם", "algorithms", "algorithm"],
+  },
+  {
+    term: "OOP",
+    phrases: ["oop", "object oriented", "object-oriented", "תכנות מונחה עצמים", "תכנות מונחה-עצמים", "מונחה עצמים"],
+  },
+  {
+    term: "Operating Systems",
+    phrases: ["מערכות הפעלה", "operating systems", "operating system"],
+    tools: ["linux", "unix", "windows server", "ubuntu"],
+  },
+  {
+    term: "Networking",
+    phrases: ["networking", "תקשורת ורשתות", "רשתות תקשורת", "תקשורת נתונים", "רשתות מחשבים", "tcp/ip", "tcp ip", "ccna"],
+    tools: ["cisco", "dns", "dhcp", "vpn"],
+  },
+  { term: "MVC", phrases: ["mvc"] },
+  {
+    term: "Cloud",
+    phrases: ["cloud", "cloud computing", "מחשוב ענן", "ענן"],
+    tools: ["aws", "azure", "gcp", "google cloud"],
+  },
+  { term: "Design Patterns", phrases: ["design patterns", "design pattern", "תבניות עיצוב", "דיזיין פטרנס"] },
+  {
+    term: "Software Testing",
+    phrases: ["בדיקות תוכנה", "בדיקת תוכנה", "בודקת תוכנה", "בודקות תוכנה", "software testing", "בדיקות איכות", "בדיקות מערכת"],
+    tools: ["test cases", "תסריטי בדיקה", "מקרי בדיקה", "manual testing", "בדיקות ידניות", "selenium", "cypress", "postman"],
+  },
+  {
+    term: "Mobile",
+    phrases: ["mobile", "מובייל", "אפליקציות מובייל", "mobile apps"],
+    tools: ["android", "ios", "react native", "flutter", "kotlin", "swift", "xamarin"],
+  },
+];
+
+export const CONCEPT_TERMS = CONCEPTS.map((c) => c.term);
