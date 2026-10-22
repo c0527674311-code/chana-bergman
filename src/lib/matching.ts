@@ -567,17 +567,35 @@ function nativeMention(text: string, language: string): boolean {
       `mother${GAP}tongue${GAP}${n}`,
     );
   }
-  if (forward.some((p) => new RegExp(p, "i").test(text))) return true;
-
   const others = SPOKEN_LANGUAGES.filter((l) => l !== language).flatMap(spokenNames).map(norm);
+  // Level words that can sit between a language and its "שפת אם":
+  // "עברית ברמת שפת אם", "עבריתברמת שפת אם" (CVs lose spaces too).
+  const LEVEL_TAIL = new RegExp(`(?:ב?רמ(?:ת|ה)|של|כ|ב)?[^\\p{L}\\p{N}]*$`, "u");
+  /** Is another language the one standing against the level, just before `index`? */
+  const ownedByOther = (index: number): boolean => {
+    const before = text.slice(Math.max(0, index - 24), index).replace(LEVEL_TAIL, "").replace(/[^\p{L}\p{N}]+$/u, "");
+    return others.some((o) => before.endsWith(o));
+  };
+
+  const forwardHit = forward.some((p) => {
+    const re = new RegExp(p, "ig");
+    for (let m = re.exec(text); m; m = re.exec(text)) {
+      // "עברית אנגלית | שפת אם רמה טובה": a row of languages above a row of
+      // levels, read right to left — the level is not the English's.
+      const inverted = m[0].includes("|") && ownedByOther(m.index);
+      if (!inverted) return true;
+    }
+    return false;
+  });
+  if (forwardHit) return true;
+
   return reverse.some((p) => {
     const re = new RegExp(p, "ig");
     for (let m = re.exec(text); m; m = re.exec(text)) {
       // Another language standing right against the level owns it:
-      // "עברית שפת אם | אנגלית". A level phrase in between ("שפת אם, שפת אם
-      // אנגלית") means this one is the English's own.
-      const before = text.slice(Math.max(0, m.index - 20), m.index);
-      if (!others.some((o) => before.endsWith(o) || new RegExp(`${o}[^\\p{L}\\p{N}]{0,6}$`, "u").test(before))) return true;
+      // "עברית שפת אם | אנגלית", "עבריתברמת שפת אם אנגלית". A level phrase in
+      // between ("שפת אם, שפת אם אנגלית") means this one is the English's own.
+      if (!ownedByOther(m.index)) return true;
     }
     return false;
   });
@@ -995,16 +1013,21 @@ function isRelevant(result: MatchResult, req: ExtractedRequirement): boolean {
   if (req.minYears != null && result.datedYears != null && result.datedYears + 0.5 < req.minYears) return false;
 
   // "אנגלית שפת אם" asks for the level, not just the language: knowing English
-  // is a near miss, not a match.
-  if (!asked && req.nativeLanguages.length) {
-    return result.matchedTechnologies.some((t) => t.endsWith(NATIVE_SUFFIX));
+  // is a near miss, not a match — beside other skills too ("PHP ואנגלית שפת
+  // אם" used to keep everyone who knew PHP and spoke English at any level).
+  for (const language of req.nativeLanguages) {
+    if (!result.matchedTechnologies.includes(`${language}${NATIVE_SUFFIX}`)) return false;
   }
+  if (!asked && req.nativeLanguages.length) return true;
   // Only unknown words or a spoken language to go on: she must have one.
   if (!asked && (req.unknownTerms.length || req.spokenLanguages.length)) {
     return result.matchedTechnologies.length > 0;
   }
   if (!asked) return req.practicum || result.score >= 60;
-  const hits = result.matchedTechnologies.length;
+  // Skills she was asked for — a matched spoken language is not one of them,
+  // or "PHP ואנגלית" kept everyone who merely spoke English.
+  const spoken = new Set(req.spokenLanguages.flatMap((l) => [l, `${l}${NATIVE_SUFFIX}`]));
+  const hits = result.matchedTechnologies.filter((t) => !spoken.has(t)).length;
   if (!hits) return false;
   // "גם קובול וגם ג'אווה" is an and, not an or.
   if (req.requireAll) return result.missingTechnologies.length === 0;
