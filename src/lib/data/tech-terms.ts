@@ -215,6 +215,8 @@ export const EXTRA_TERMS: ExtraTerm[] = [
   { term: "Embedded", kind: "tech", aliases: ["אמבדד", "מוטמע"] },
   { term: "RTOS", kind: "tech", aliases: ["freertos"] },
   { term: "FPGA", kind: "tech" },
+  { term: "Design Verification", kind: "tech", aliases: ["verification", "וריפיקציה", "ורפיקציה", "אימות חומרה", "אימות שבבים"] },
+  { term: "UVM", kind: "tech", aliases: ["יו וי אם"] },
   { term: "PLC", kind: "tech", aliases: ["scada"] },
   { term: "Arduino", kind: "tech" },
   { term: "Raspberry Pi", kind: "tech" },
