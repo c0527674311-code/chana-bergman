@@ -544,19 +544,40 @@ const GAP = "[ \\t\\-–—:()\\[\\]\"'|]{0,6}";
 const NATIVE_SUFFIX = " — שפת אם";
 
 function nativeMention(text: string, language: string): boolean {
-  const patterns: string[] = [];
+  // Language first, level after: "אנגלית ברמת שפת אם". Safe on its own.
+  const forward: string[] = [];
+  // Level first, language after: "שפת אם | אנגלית". In a CV list this is how
+  // the *previous* language's level runs into the next language's name
+  // ("עברית שפת אם | אנגלית טובה"), so it only counts when no other language
+  // stands right before the level.
+  const reverse: string[] = [];
   for (const name of spokenNames(language)) {
     const n = norm(name);
-    patterns.push(
-      `${n}${GAP}(?:ב?רמת${GAP})?שפת${GAP}אם`,
-      `שפת${GAP}אם${GAP}ב?${n}`,
-      `native${GAP}(?:level${GAP})?${n}`,
-      `${n}${GAP}native`,
+    forward.push(
+      // "שפת אם", "ברמת שפת אם", "ברמה של שפת אם", "כשפת אם", "שפת האם"
+      `${n}${GAP}(?:ב?רמ(?:ת|ה)${GAP}(?:של${GAP})?|כ)?שפת${GAP}ה?אם`,
+      // "שפה ראשונה", "ילידית" — the same level in other words
+      `${n}${GAP}(?:ב?רמת${GAP})?(?:כ?שפה${GAP}ראשונה|ילידי(?:ת)?)`,
+      `${n}${GAP}(?:native|mother${GAP}tongue)`,
+    );
+    reverse.push(
+      `שפת${GAP}ה?אם${GAP}ב?${n}`,
+      `ילידי(?:ת)?${GAP}${n}`,
+      `native${GAP}(?:level${GAP}|speaker${GAP}(?:of${GAP})?)?${n}`,
       `mother${GAP}tongue${GAP}${n}`,
-      `${n}${GAP}mother${GAP}tongue`,
     );
   }
-  return patterns.some((p) => new RegExp(p, "i").test(text));
+  if (forward.some((p) => new RegExp(p, "i").test(text))) return true;
+
+  const others = SPOKEN_LANGUAGES.filter((l) => l !== language).flatMap(spokenNames).map(norm);
+  return reverse.some((p) => {
+    const re = new RegExp(p, "ig");
+    for (let m = re.exec(text); m; m = re.exec(text)) {
+      const before = text.slice(Math.max(0, m.index - 14), m.index);
+      if (!others.some((o) => before.includes(o))) return true;
+    }
+    return false;
+  });
 }
 
 function unknownTerms(text: string): string[] {
@@ -579,6 +600,21 @@ function unknownTerms(text: string): string[] {
 }
 
 const PRACTICUM_ASKED = /פרקטיקום|פרקטיקם|פרקטיקות|diversi\s*te(ch|ck)|דיברסיטק|דייברסיטק/i;
+
+/**
+ * "מנוסה" and "בכירה" are floors: a senior developer satisfies "מנוסה ב-PHP".
+ * Matching the label exactly gave a 14-year senior 0 of 3 seniority points
+ * (67% for a requirement she fully met). Other levels stay exact — a team
+ * lead is not what "ג'וניורית" asks for.
+ */
+function meetsSeniority(have: string | null | undefined, asked: string): boolean {
+  if (!have) return false;
+  if (have === asked) return true;
+  if (asked !== "מנוסה" && asked !== "בכירה") return false;
+  const order = SENIORITY as readonly string[];
+  const h = order.indexOf(have);
+  return h >= 0 && h >= order.indexOf(asked);
+}
 
 /** Lower bound of an experience bucket, for comparing against minYears. */
 function bucketFloor(bucket: string | null): number {
@@ -816,9 +852,11 @@ export function scoreCandidate(
 
   if (req.seniority) {
     max += WEIGHTS.seniority;
-    if (candidate.seniority === req.seniority) {
+    if (meetsSeniority(candidate.seniority, req.seniority)) {
       score += WEIGHTS.seniority;
-      evidence.push({ term: candidate.seniority, source: "fields" });
+      // Shown as the level she asked for, not the card's label: "מנוסה" met by a
+      // senior card must not read as if the requirement said "בכירה".
+      evidence.push({ term: req.seniority, source: "fields" });
     }
   }
 
