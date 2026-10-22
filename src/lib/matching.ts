@@ -573,8 +573,11 @@ function nativeMention(text: string, language: string): boolean {
   return reverse.some((p) => {
     const re = new RegExp(p, "ig");
     for (let m = re.exec(text); m; m = re.exec(text)) {
-      const before = text.slice(Math.max(0, m.index - 14), m.index);
-      if (!others.some((o) => before.includes(o))) return true;
+      // Another language standing right against the level owns it:
+      // "עברית שפת אם | אנגלית". A level phrase in between ("שפת אם, שפת אם
+      // אנגלית") means this one is the English's own.
+      const before = text.slice(Math.max(0, m.index - 20), m.index);
+      if (!others.some((o) => before.endsWith(o) || new RegExp(`${o}[^\\p{L}\\p{N}]{0,6}$`, "u").test(before))) return true;
     }
     return false;
   });
