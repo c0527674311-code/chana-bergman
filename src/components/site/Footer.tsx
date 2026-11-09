@@ -86,6 +86,19 @@ export function Footer() {
                 </a>
               </li>
               <li className="leading-relaxed">{CONTACT_DETAILS.address}</li>
+              {/* Shown only once there is a profile to point at. */}
+              {CONTACT_DETAILS.linkedin && (
+                <li>
+                  <a
+                    href={CONTACT_DETAILS.linkedin}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="focus-brand rounded hover:text-primary"
+                  >
+                    הפרופיל שלי בלינקדאין ↗
+                  </a>
+                </li>
+              )}
             </ul>
           </div>
         </div>

@@ -109,6 +109,7 @@ export function renderTemplate(template: string, r: Names): string {
  * simply lost and Hebrew arrives left-aligned.
  */
 function toHtml(body: string, unsubscribeUrl: string): string {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://chana-bergman.co.il";
   const paragraphs = body
     .split(/\n{2,}/)
     .map((p) => `<p style="margin:0 0 16px">${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
@@ -118,6 +119,17 @@ function toHtml(body: string, unsubscribeUrl: string): string {
 <div dir="rtl" style="max-width:600px;margin:0 auto;padding:32px 24px;font-family:Assistant,Arial,sans-serif;font-size:16px;line-height:1.7;color:#1c1c3c;background:#fff;direction:rtl;text-align:right">
 ${paragraphs}
 <hr style="margin:28px 0;border:0;border-top:1px solid #e6e6ee">
+<!-- The CV builder is the way back into the pool: a candidate who updates her
+     CV here updates her record, so it is worth a real invitation, not a link
+     in the small print. -->
+<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#eafaf4;border-radius:14px;margin:0 0 20px">
+  <tr><td style="padding:16px 18px;text-align:right">
+    <p style="margin:0 0 6px;font-size:15px;font-weight:bold;color:#1c1c3c">בונה קורות החיים של חנה — חינם</p>
+    <p style="margin:0 0 10px;font-size:14px;color:#4a4a63">קורות חיים מעוצבים ומוכנים לשליחה תוך כמה דקות, ישירות מהאתר.</p>
+    <a href="${escapeHtml(siteUrl)}/cv-builder" style="display:inline-block;background:#6c83d0;color:#fff;text-decoration:none;font-size:14px;font-weight:bold;padding:9px 20px;border-radius:999px">ליצירת קורות חיים ↗</a>
+    <a href="${escapeHtml(siteUrl)}/jobs" style="display:inline-block;margin-right:10px;color:#6c83d0;text-decoration:none;font-size:14px;font-weight:bold;padding:9px 0">למשרות באתר ↗</a>
+  </td></tr>
+</table>
 <p style="font-size:12px;color:#8a8a9c;margin:0">
   קיבלת את המייל הזה כי נמצאת במאגר המועמדות של חנה ברגמן.
   <a href="${escapeHtml(unsubscribeUrl)}" style="color:#6c83d0">להסרה מרשימת התפוצה</a>
@@ -126,7 +138,8 @@ ${paragraphs}
 }
 
 function toText(body: string, unsubscribeUrl: string): string {
-  return `${body}\n\n—\nקיבלת את המייל הזה כי נמצאת במאגר המועמדות של חנה ברגמן.\nלהסרה מרשימת התפוצה: ${unsubscribeUrl}`;
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://chana-bergman.co.il";
+  return `${body}\n\n—\nבונה קורות החיים של חנה — חינם: ${siteUrl}/cv-builder\nמשרות באתר: ${siteUrl}/jobs\n\nקיבלת את המייל הזה כי נמצאת במאגר המועמדות של חנה ברגמן.\nלהסרה מרשימת התפוצה: ${unsubscribeUrl}`;
 }
 
 function escapeHtml(s: string): string {

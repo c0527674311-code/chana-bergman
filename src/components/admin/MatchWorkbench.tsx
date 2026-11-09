@@ -342,12 +342,12 @@ export function MatchWorkbench({
                         )}
                         {/* Counted from the dates she wrote, not from a band
                             she filled in three years ago. */}
-                        {r.datedYears != null && (
+                        {r.years != null && (
                           <span
                             className="rounded-full bg-canvas px-2 py-0.5 text-[12px] font-semibold text-ink/70"
-                            title="מחושב לפי התאריכים בפרק הניסיון התעסוקתי"
+                            title="לפי התאריכים בפרק הניסיון, או לפי מה שרשום בכרטיס — הגבוה מביניהם"
                           >
-                            {r.datedYears === 0 ? "ללא ניסיון תעסוקתי" : `ותק ${r.datedYears} שנים`}
+                            {r.years === 0 ? "ללא ניסיון תעסוקתי" : `ותק ${r.years} שנים`}
                           </span>
                         )}
                         {mailBlockReason(r) && (

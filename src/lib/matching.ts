@@ -890,12 +890,18 @@ export function scoreCandidate(
     }
   }
 
-  // What the CV's own dates say, which beats a band stored years ago.
+  // Two accounts of her seniority, and they disagree in both directions: a
+  // band stored three years ago understates her, and a CV whose dates did not
+  // survive the PDF understates her too. The higher of the two is the honest
+  // answer — and it is what a ceiling must be measured against, or a "10+
+  // שנים" candidate slips into a search for "עד 5 שנים".
   const datedYears = neverWorked ? 0 : yearsFromExperience(sections.experience);
-  const years = datedYears ?? bucketFloor(candidate.experience_years);
-  const yearsLabel = datedYears != null
-    ? `ותק לפי התאריכים בקו״ח: ${datedYears} שנים`
-    : `ניסיון: ${candidate.experience_years}`;
+  const bandYears = neverWorked ? 0 : bucketFloor(candidate.experience_years);
+  const years = Math.max(datedYears ?? 0, bandYears);
+  const yearsLabel =
+    datedYears != null && datedYears >= bandYears
+      ? `ותק לפי התאריכים בקו״ח: ${datedYears} שנים`
+      : `ניסיון: ${candidate.experience_years}`;
 
   if (req.minYears != null) {
     max += WEIGHTS.years;
@@ -946,6 +952,7 @@ export function scoreCandidate(
     experienceMatch: skillsInExperience >= Math.max(1, skillsAsked <= 2 ? 1 : Math.ceil(skillsAsked / 3)),
     experienceTerms: skillsInExperience,
     datedYears,
+    years,
   };
 }
 
@@ -1008,9 +1015,10 @@ function isRelevant(result: MatchResult, req: ExtractedRequirement): boolean {
   if (req.practicum && !isPracticumGraduate(result.candidate, req.practicumYear)) return false;
 
   // A ceiling is a decision, not a preference: a role that cannot pay for ten
-  // years should not be shown ten years.
-  if (req.maxYears != null && result.datedYears != null && result.datedYears > req.maxYears) return false;
-  if (req.minYears != null && result.datedYears != null && result.datedYears + 0.5 < req.minYears) return false;
+  // years should not be shown ten years. Measured against the higher of her
+  // two accounts, so a missing date in the CV is not a way through.
+  if (req.maxYears != null && result.years != null && result.years > req.maxYears) return false;
+  if (req.minYears != null && result.years != null && result.years + 0.5 < req.minYears) return false;
 
   // "אנגלית שפת אם" asks for the level, not just the language: knowing English
   // is a near miss, not a match — beside other skills too ("PHP ואנגלית שפת
@@ -1091,6 +1099,7 @@ function directLookup(candidates: Candidate[], text: string): MatchResult[] {
       experienceMatch: false,
       experienceTerms: 0,
       datedYears: null,
+      years: null,
     });
   }
   return hits.sort((a, b) => b.score - a.score);

@@ -55,8 +55,9 @@ export type MatchRow = {
   evidence: MatchEvidence[];
   /** True when the requirement's technology appears in her employment history. */
   experienceMatch: boolean;
-  /** Years of work counted from the dates in her CV. */
+  /** Years of work as the filters count them. */
   datedYears: number | null;
+  years: number | null;
   /** Her current CV file: a link that works for an hour, or null when there is no file. */
   cvUrl: string | null;
   cvName: string | null;
@@ -122,6 +123,7 @@ export async function runMatch(
       evidence: r.evidence,
       experienceMatch: r.experienceMatch,
       datedYears: r.datedYears,
+      years: r.years,
       cvUrl: cvs.has(r.candidate.id) ? `/api/admin/cv-file?candidate=${r.candidate.id}` : null,
       cvName: cvs.get(r.candidate.id) ?? null,
     })),

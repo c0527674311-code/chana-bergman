@@ -94,6 +94,8 @@ export type MatchResult = {
   experienceTerms: number;
   /** Years of work counted from the dates in her CV, when they are there. */
   datedYears: number | null;
+  /** Her seniority as the filters use it: the higher of the dates and the stored band. */
+  years: number | null;
 };
 
 export type MatchEvidence = {
