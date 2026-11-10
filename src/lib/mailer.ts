@@ -119,6 +119,12 @@ function toHtml(body: string, unsubscribeUrl: string): string {
 <div dir="rtl" style="max-width:600px;margin:0 auto;padding:32px 24px;font-family:Assistant,Arial,sans-serif;font-size:16px;line-height:1.7;color:#1c1c3c;background:#fff;direction:rtl;text-align:right">
 ${paragraphs}
 <hr style="margin:28px 0;border:0;border-top:1px solid #e6e6ee">
+<!-- The logo is a hosted PNG with a fixed width: mail clients do not render
+     SVG, and without width/height Outlook draws it at its full 612px. -->
+<a href="${escapeHtml(siteUrl)}" style="text-decoration:none">
+  <img src="${escapeHtml(siteUrl)}/brand/logo.png" alt="חנה ברגמן" width="170" height="67"
+       style="display:block;width:170px;height:auto;border:0;margin:0 0 14px">
+</a>
 <!-- The CV builder is the way back into the pool: a candidate who updates her
      CV here updates her record, so it is worth a real invitation, not a link
      in the small print. -->
