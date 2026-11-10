@@ -211,5 +211,5 @@ export const CONTACT_DETAILS = {
   phone: "052-767-4311",
   phoneAlt: "073-338-3374",
   address: "ז׳בוטינסקי 71, בני ברק",
-  linkedin: "",
+  linkedin: "https://www.linkedin.com/in/chana-bergman",
 } as const;
