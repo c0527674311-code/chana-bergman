@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CopySignatureButton } from "@/components/admin/CopySignatureButton";
 import { ButtonLink } from "@/components/ui/Button";
 import { createClient, supabaseConfigured } from "@/lib/supabase/server";
 import { candidateStats } from "@/lib/queries";
@@ -66,9 +67,12 @@ export default async function CampaignsPage() {
             )}
           </p>
         </div>
-        <ButtonLink href="/admin/match" size="md">
-          בחירת נמענות
-        </ButtonLink>
+        <div className="flex flex-col items-start gap-3">
+          <ButtonLink href="/admin/match" size="md">
+            בחירת נמענות
+          </ButtonLink>
+          <CopySignatureButton />
+        </div>
       </header>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">

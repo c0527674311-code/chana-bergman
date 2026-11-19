@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { CONTACT_DETAILS } from "@/lib/content/site";
+import { brandedEmailHtml, escapeHtml } from "@/lib/email-brand";
 
 /**
  * Email abstraction. Swapping providers is a change to this file plus env
@@ -101,59 +102,18 @@ export function renderTemplate(template: string, r: Names): string {
   return out;
 }
 
-/**
- * Wraps the campaign body in the email shell.
- *
- * The direction is declared on the inner div, not only on <html>: Gmail strips
- * the <html> and <body> tags and renders what is left, so a dir set up there is
- * simply lost and Hebrew arrives left-aligned.
- */
+/** Wraps the campaign body in the email shell (see email-brand.ts). */
 function toHtml(body: string, unsubscribeUrl: string): string {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://chana-bergman.co.il";
-  const paragraphs = body
-    .split(/\n{2,}/)
-    .map((p) => `<p style="margin:0 0 16px">${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
-    .join("");
-
-  return `<!doctype html><html lang="he" dir="rtl"><body style="margin:0;background:#f4f5f7">
-<div dir="rtl" style="max-width:600px;margin:0 auto;padding:32px 24px;font-family:Assistant,Arial,sans-serif;font-size:16px;line-height:1.7;color:#1c1c3c;background:#fff;direction:rtl;text-align:right">
-${paragraphs}
-<hr style="margin:28px 0;border:0;border-top:1px solid #e6e6ee">
-<!-- The logo is a hosted PNG with a fixed width: mail clients do not render
-     SVG, and without width/height Outlook draws it at its full 612px. -->
-<a href="${escapeHtml(siteUrl)}" style="text-decoration:none">
-  <img src="${escapeHtml(siteUrl)}/brand/logo.png" alt="חנה ברגמן" width="170" height="67"
-       style="display:block;width:170px;height:auto;border:0;margin:0 0 14px">
-</a>
-<!-- The CV builder is the way back into the pool: a candidate who updates her
-     CV here updates her record, so it is worth a real invitation, not a link
-     in the small print. -->
-<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#eafaf4;border-radius:14px;margin:0 0 20px">
-  <tr><td style="padding:16px 18px;text-align:right">
-    <p style="margin:0 0 6px;font-size:15px;font-weight:bold;color:#1c1c3c">בונה קורות החיים של חנה — חינם</p>
-    <p style="margin:0 0 10px;font-size:14px;color:#4a4a63">קורות חיים מעוצבים ומוכנים לשליחה תוך כמה דקות, ישירות מהאתר.</p>
-    <a href="${escapeHtml(siteUrl)}/cv-builder" style="display:inline-block;background:#6c83d0;color:#fff;text-decoration:none;font-size:14px;font-weight:bold;padding:9px 20px;border-radius:999px">ליצירת קורות חיים ↗</a>
-    <a href="${escapeHtml(siteUrl)}/jobs" style="display:inline-block;margin-right:10px;color:#6c83d0;text-decoration:none;font-size:14px;font-weight:bold;padding:9px 0">למשרות באתר ↗</a>
-  </td></tr>
-</table>
-<p style="font-size:12px;color:#8a8a9c;margin:0">
-  קיבלת את המייל הזה כי נמצאת במאגר המועמדות של חנה ברגמן.
-  <a href="${escapeHtml(unsubscribeUrl)}" style="color:#6c83d0">להסרה מרשימת התפוצה</a>
-</p>
-</div></body></html>`;
+  return brandedEmailHtml(
+    body,
+    `קיבלת את המייל הזה כי נמצאת במאגר המועמדות של חנה ברגמן.
+  <a href="${escapeHtml(unsubscribeUrl)}" style="color:#6c83d0">להסרה מרשימת התפוצה</a>`,
+  );
 }
 
 function toText(body: string, unsubscribeUrl: string): string {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://chana-bergman.co.il";
-  return `${body}\n\n—\nבונה קורות החיים של חנה — חינם: ${siteUrl}/cv-builder\nמשרות באתר: ${siteUrl}/jobs\n\nקיבלת את המייל הזה כי נמצאת במאגר המועמדות של חנה ברגמן.\nלהסרה מרשימת התפוצה: ${unsubscribeUrl}`;
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  return `${body}\n\n—\nבונה קורות החיים של חנה — חינם: ${siteUrl}/cv-builder\n\nקיבלת את המייל הזה כי נמצאת במאגר המועמדות של חנה ברגמן.\nלהסרה מרשימת התפוצה: ${unsubscribeUrl}`;
 }
 
 export async function sendBulk(
@@ -260,6 +220,8 @@ export async function sendEmail(opts: {
   html: string;
   text?: string;
   replyTo?: string;
+  /** Files sent with the message; `content` is base64. */
+  attachments?: Array<{ filename: string; content: string }>;
 }): Promise<{ ok: true; id?: string } | { ok: false; error: string }> {
   try {
     const provider = mailProvider();
@@ -280,6 +242,7 @@ export async function sendEmail(opts: {
         html: opts.html,
         ...(opts.text ? { text: opts.text } : {}),
         ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
+        ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
       },
       // One key for this call, so the network retry can't deliver it twice.
       randomUUID(),
