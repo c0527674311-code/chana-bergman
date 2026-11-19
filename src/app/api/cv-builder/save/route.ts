@@ -7,6 +7,9 @@ import { normalizeEmail, normalizePhone, storageKey } from "@/lib/utils";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+/** Under the 4.5MB request limit of the host. */
+const MAX_PDF_BYTES = 4 * 1024 * 1024;
+
 /**
  * A CV built on /cv-builder also joins Chana's pool.
  *
@@ -50,7 +53,32 @@ function cvToText(cv: Record<string, unknown>): string {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null);
+  // The page sends the CV as JSON plus the PDF it just made (multipart); a
+  // plain JSON body, without a file, is still accepted.
+  let body: Record<string, unknown> | null = null;
+  let pdf: Buffer | null = null;
+  if (request.headers.get("content-type")?.includes("multipart/form-data")) {
+    const form = await request.formData().catch(() => null);
+    if (form) {
+      try {
+        body = {
+          cv: JSON.parse(String(form.get("cv") ?? "null")),
+          consent: form.get("consent") === "true",
+          company_website: form.get("company_website") ?? "",
+        };
+      } catch {
+        body = null;
+      }
+      const file = form.get("pdf");
+      if (file instanceof File && file.size > 0 && file.size <= MAX_PDF_BYTES) {
+        const bytes = Buffer.from(await file.arrayBuffer());
+        // A real PDF starts with "%PDF"; anything else is not stored as one.
+        if (bytes.subarray(0, 4).toString("latin1") === "%PDF") pdf = bytes;
+      }
+    }
+  } else {
+    body = await request.json().catch(() => null);
+  }
   const cv = (body?.cv ?? null) as Record<string, unknown> | null;
   if (!cv) return NextResponse.json({ error: "בקשה לא תקינה." }, { status: 400 });
 
@@ -128,13 +156,17 @@ export async function POST(request: Request) {
       candidateId = data.id as string;
     }
 
-    // The CV itself, as text, so every word in it is searchable.
+    // The CV itself. The PDF she downloaded is the document Chana opens; the
+    // text of the CV rides along as its extracted text, so every word in it is
+    // searchable. Without a PDF the text is stored as a file of its own.
     const text = cvToText(cv);
-    if (text) {
-      const path = `${candidateId}/${Date.now()}-${storageKey("cv-builder.txt")}`;
+    if (text || pdf) {
+      const asPdf = pdf != null;
+      const bytes = pdf ?? Buffer.from(text, "utf8");
+      const path = `${candidateId}/${Date.now()}-${storageKey(asPdf ? "cv-builder.pdf" : "cv-builder.txt")}`;
       const { error: upErr } = await admin.storage
         .from("cvs")
-        .upload(path, Buffer.from(text, "utf8"), { contentType: "text/plain", upsert: false });
+        .upload(path, bytes, { contentType: asPdf ? "application/pdf" : "text/plain", upsert: false });
       if (upErr) throw upErr;
 
       const { data: versions } = await admin
@@ -148,9 +180,9 @@ export async function POST(request: Request) {
       const { error: docErr } = await admin.from("cv_documents").insert({
         candidate_id: candidateId,
         storage_path: path,
-        file_name: "קורות חיים שנבנו באתר.txt",
-        mime_type: "text/plain",
-        size_bytes: Buffer.byteLength(text, "utf8"),
+        file_name: asPdf ? "קורות חיים שנבנו באתר.pdf" : "קורות חיים שנבנו באתר.txt",
+        mime_type: asPdf ? "application/pdf" : "text/plain",
+        size_bytes: bytes.byteLength,
         version: (versions?.[0]?.version ?? 0) + 1,
         is_current: isCurrent,
         source: "site",

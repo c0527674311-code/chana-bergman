@@ -16,6 +16,7 @@ import {
   type CvData,
   type CvTemplateId,
 } from "@/lib/cv-builder";
+import { renderCvPdf } from "@/lib/cv-pdf";
 import { cn } from "@/lib/utils";
 
 
@@ -89,6 +90,13 @@ export function CvBuilder() {
   );
   const previewRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  // An untransformed, off-screen copy at true A4: the PDF is drawn from it.
+  const renderRef = useRef<HTMLDivElement>(null);
+  // The PDF of what is on the form now, kept so download, share and the copy
+  // sent to the pool are one render, not three.
+  const pdfRef = useRef<{ key: string; blob: Promise<Blob> } | null>(null);
+  const [busy, setBusy] = useState<"" | "download" | "share" | "whatsapp" | "mail">("");
+  const [notice, setNotice] = useState("");
 
   // Load the pricing config up front so the button can show the price.
 
@@ -144,30 +152,119 @@ export function CvBuilder() {
     });
   }
 
+  function makePdf(): Promise<Blob> {
+    const key = JSON.stringify({ cv: cleanCv(data), template });
+    if (pdfRef.current?.key === key) return pdfRef.current.blob;
+    const node = renderRef.current?.firstElementChild as HTMLElement | null;
+    if (!node) return Promise.reject(new Error("no sheet"));
+    const blob = renderCvPdf(node);
+    pdfRef.current = { key, blob };
+    blob.catch(() => {
+      if (pdfRef.current?.key === key) pdfRef.current = null;
+    });
+    return blob;
+  }
+
   /**
-   * A CV written here is a candidate. It is saved to Chana's pool (the text
-   * goes in as her document, so a search finds every word of it); mailing is
-   * only on if she ticked the box.
+   * A CV written here is a candidate. It is saved to Chana's pool as the PDF
+   * itself (its text goes in with it, so a search finds every word of it);
+   * mailing is only on if she ticked the box.
    */
-  async function saveToPool() {
-    const payload = JSON.stringify({ cv: cleanCv(data), consent: joinConsent });
-    if (savedRef.current === payload) return;
-    savedRef.current = payload;
+  async function saveToPool(pdf: Blob | null) {
+    const cv = cleanCv(data);
+    const key = JSON.stringify({ cv, template, consent: joinConsent });
+    if (savedRef.current === key) return;
+    savedRef.current = key;
     try {
-      await fetch("/api/cv-builder/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: payload,
-      });
+      const form = new FormData();
+      form.set("cv", JSON.stringify(cv));
+      form.set("consent", String(joinConsent));
+      if (pdf) form.set("pdf", pdf, "cv.pdf");
+      const res = await fetch("/api/cv-builder/save", { method: "POST", body: form });
+      if (!res.ok) savedRef.current = "";
     } catch {
       // The download matters more than the record; she can always submit.
+      savedRef.current = "";
     }
   }
 
-  async function download() {
-    void saveToPool();
-    window.print();
+  function fileName() {
+    const name = (cleanCv(data).fullName ?? "").trim().replace(/[\\/:*?"<>|]+/g, "");
+    return `${name ? `קורות חיים - ${name}` : "קורות חיים"}.pdf`;
   }
+
+  function saveFile(blob: Blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
+
+  /** Runs one of the buttons: builds the PDF, files a copy in the pool, then acts. */
+  async function run(kind: NonNullable<typeof busy>, act: (pdf: Blob) => void | Promise<void>) {
+    if (busy) return;
+    setBusy(kind);
+    setNotice("");
+    try {
+      const pdf = await makePdf();
+      void saveToPool(pdf);
+      await act(pdf);
+    } catch (err) {
+      // Someone closing the share sheet is not an error.
+      if ((err as Error)?.name !== "AbortError") {
+        setNotice("לא הצלחנו להכין את הקובץ. אפשר לנסות שוב, או להדפיס לקובץ PDF מהדפדפן.");
+        void saveToPool(null);
+      }
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const download = () => run("download", saveFile);
+
+  const SHARE_TEXT = "מצורפים קורות החיים שלי.";
+
+  const canShareFile =
+    isClient &&
+    typeof navigator !== "undefined" &&
+    typeof navigator.canShare === "function" &&
+    navigator.canShare({ files: [new File([""], "cv.pdf", { type: "application/pdf" })] });
+
+  const share = () =>
+    run("share", async (pdf) => {
+      const file = new File([pdf], fileName(), { type: "application/pdf" });
+      await navigator.share({ files: [file], title: "קורות חיים", text: SHARE_TEXT });
+    });
+
+  // Without file sharing (desktop) the file is saved and the app opens with the
+  // message ready — a link cannot carry an attachment, so she adds it by hand.
+  const viaWhatsapp = () =>
+    run("whatsapp", (pdf) => {
+      saveFile(pdf);
+      window.open(`https://wa.me/?text=${encodeURIComponent(SHARE_TEXT)}`, "_blank", "noopener");
+      setNotice("הקובץ ירד למחשב — צרפי אותו להודעה בוואטסאפ.");
+    });
+
+  // Sent from the site in Chana's email design, to the address in her CV.
+  const viaMail = () =>
+    run("mail", async (pdf) => {
+      const cv = cleanCv(data);
+      if (!cv.email) {
+        setNotice("כדי לשלוח למייל צריך למלא כתובת מייל בפרטים האישיים.");
+        return;
+      }
+      const form = new FormData();
+      form.set("email", cv.email);
+      form.set("name", cv.fullName ?? "");
+      form.set("pdf", pdf, "cv.pdf");
+      const res = await fetch("/api/cv-builder/send", { method: "POST", body: form });
+      const out = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      setNotice(out?.ok ? `נשלח אל ${cv.email}.` : (out?.error ?? "השליחה נכשלה."));
+    });
 
   // Screen and paper get different copies: the preview fills blanks with
   // greyed-out examples, the PDF holds only what she actually wrote.
@@ -361,9 +458,25 @@ export function CvBuilder() {
               מאשרת שחנה תעדכן אותי במייל על משרות שמתאימות לי.
             </span>
           </label>
-          <Button size="lg" withArrow={false} onClick={download} disabled={!ready}>
-            הורדת קורות החיים כ-PDF
+          <Button size="lg" withArrow={false} onClick={download} disabled={!ready || !!busy}>
+            {busy === "download" ? "מכינה את הקובץ…" : "הורדת קורות החיים כ-PDF"}
           </Button>
+          <div className="flex flex-wrap justify-center gap-2" role="group" aria-label="שיתוף קורות החיים">
+            {canShareFile && (
+              <ShareButton onClick={share} disabled={!ready || !!busy}>
+                {busy === "share" ? "מכינה…" : "שיתוף"}
+              </ShareButton>
+            )}
+            <ShareButton onClick={viaWhatsapp} disabled={!ready || !!busy}>
+              {busy === "whatsapp" ? "מכינה…" : "וואטסאפ"}
+            </ShareButton>
+            <ShareButton onClick={viaMail} disabled={!ready || !!busy}>
+              {busy === "mail" ? "שולחת…" : "שליחה למייל שלי"}
+            </ShareButton>
+          </div>
+          <p role="status" aria-live="polite" className="max-w-sm text-center text-[13px] font-medium text-primary empty:hidden">
+            {notice}
+          </p>
           {!ready && (
             <p className="text-center text-[13px] text-ink/55">
               מלאי לפחות שם מלא ודרך התקשרות כדי להוריד.
@@ -388,9 +501,18 @@ export function CvBuilder() {
           and holds her real details only, never the sample content. */}
       {isClient &&
         createPortal(
-          <div id="cv-print-root" aria-hidden="true">
-            <CvSheet data={printable} template={template} print />
-          </div>,
+          <>
+            <div id="cv-print-root" aria-hidden="true">
+              <CvSheet data={printable} template={template} print />
+            </div>
+            <div
+              ref={renderRef}
+              aria-hidden="true"
+              style={{ position: "fixed", top: 0, left: "-10000px", pointerEvents: "none" }}
+            >
+              <CvSheet data={printable} template={template} />
+            </div>
+          </>,
           document.body,
         )}
     </div>
@@ -399,6 +521,27 @@ export function CvBuilder() {
 
 
 /* ------------------------------------------------------------------ */
+
+function ShareButton({
+  onClick,
+  disabled,
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="focus-brand h-10 rounded-full border border-ink/15 bg-white px-5 text-[14px] font-semibold text-navy transition-colors hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {children}
+    </button>
+  );
+}
 
 function Fieldset({
   title,
