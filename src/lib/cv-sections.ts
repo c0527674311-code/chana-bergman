@@ -206,6 +206,25 @@ export function yearsFromExperience(experience: string, now = new Date()): numbe
   return years >= 0 && years <= 50 ? years : null;
 }
 
+/**
+ * Years since she finished studying, for a candidate with no employment dates.
+ *
+ * Her last graduation year is the latest year in the education section, or the
+ * year on her card (practicum cohort, class year) when the CV gives none. A
+ * year still ahead of us means she has not finished: null, not a negative.
+ */
+export function yearsSinceGraduation(
+  education: string,
+  cardYears: Array<number | null | undefined> = [],
+  now = new Date(),
+): { years: number; year: number } | null {
+  const thisYear = now.getFullYear();
+  const fromCv = (education.match(/(?:19|20)\d{2}/g) ?? []).map(Number).filter((y) => y >= 1980 && y <= thisYear + 1);
+  const year = fromCv.length ? Math.max(...fromCv) : cardYears.find((y): y is number => !!y && y >= 1980 && y <= thisYear + 1);
+  if (year == null || year > thisYear) return null;
+  return { years: thisYear - year, year };
+}
+
 /** Does the requirement ask for hands-on experience, rather than knowledge? */
 export function asksForExperience(text: string): boolean {
   return /(ני?סיון|מנוס(ה|ות|ים)|עבד(ה|ו|תי)?\s|hands[\s-]?on|experience|worked\s+with|years?\s+of)/i.test(text);

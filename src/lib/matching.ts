@@ -10,6 +10,7 @@ import { CONCEPTS, CONCEPT_TERMS, EXTRA_TECHNOLOGIES, EXTRA_TERMS } from "@/lib/
 import {
   asksForExperience,
   yearsFromExperience,
+  yearsSinceGraduation,
   SECTION_WEIGHT,
   splitCvSections,
   type CvSection,
@@ -341,6 +342,12 @@ function extractYearRange(text: string): { min: number | null; max: number | nul
   // "עד 3 שנים" names one number, and it is the ceiling — not also the floor.
   const floor = extractMinYears(t);
   if (min == null && floor != null && (max == null || floor < max)) min = floor;
+
+  // "שנתיים ניסיון" is a size, not a floor: a ten-year developer is not what
+  // she meant. Only an explicit open end ("לפחות", "מעל", "5+", "ומעלה")
+  // leaves the top open; otherwise a year or two of slack above the number.
+  const openEnded = /לפחות|מינימום|מעל|יותר\s*מ|ומעלה|ויותר|\d\s*\+|\+\s*\d|at\s*least|minimum|\bmin\b|more\s*than|or\s*more/i.test(t);
+  if (max == null && min != null && !openEnded) max = min + (min >= 5 ? 2 : 1);
   return { min, max };
 }
 
@@ -897,17 +904,25 @@ export function scoreCandidate(
   // שנים" candidate slips into a search for "עד 5 שנים".
   const datedYears = neverWorked ? 0 : yearsFromExperience(sections.experience);
   const bandYears = neverWorked ? 0 : bucketFloor(candidate.experience_years);
-  const years = Math.max(datedYears ?? 0, bandYears);
-  const yearsLabel =
-    datedYears != null && datedYears >= bandYears
+  // No job on record at all: the clock runs from when she finished studying.
+  // With a job, the years of work are what count.
+  const hasWorked = !neverWorked && (datedYears ?? 0) + bandYears > 0;
+  const graduation = hasWorked
+    ? null
+    : yearsSinceGraduation(sections.education, [candidate.diversitech_year, candidate.cohort_year]);
+  const years = hasWorked ? Math.max(datedYears ?? 0, bandYears) : graduation?.years ?? 0;
+  const yearsLabel = graduation
+    ? `ללא ניסיון תעסוקתי — ${graduation.years} שנים מסיום הלימודים (${graduation.year})`
+    : datedYears != null && datedYears >= bandYears
       ? `ותק לפי התאריכים בקו״ח: ${datedYears} שנים`
       : `ניסיון: ${candidate.experience_years}`;
+  const yearsFromCv = !graduation && datedYears != null;
 
   if (req.minYears != null) {
     max += WEIGHTS.years;
     if (years >= req.minYears) {
       score += WEIGHTS.years;
-      evidence.push({ term: yearsLabel, source: datedYears != null ? "cv" : "fields", section: datedYears != null ? "experience" : undefined });
+      evidence.push({ term: yearsLabel, source: yearsFromCv || graduation ? "cv" : "fields", section: yearsFromCv ? "experience" : graduation ? "education" : undefined });
     }
   }
   if (req.maxYears != null) {
@@ -916,7 +931,7 @@ export function scoreCandidate(
     if (years <= req.maxYears) {
       score += WEIGHTS.years;
       if (req.minYears == null) {
-        evidence.push({ term: yearsLabel, source: datedYears != null ? "cv" : "fields", section: datedYears != null ? "experience" : undefined });
+        evidence.push({ term: yearsLabel, source: yearsFromCv || graduation ? "cv" : "fields", section: yearsFromCv ? "experience" : graduation ? "education" : undefined });
       }
     }
   }
@@ -1027,6 +1042,11 @@ function isRelevant(result: MatchResult, req: ExtractedRequirement): boolean {
     if (!result.matchedTechnologies.includes(`${language}${NATIVE_SUFFIX}`)) return false;
   }
   if (!asked && req.nativeLanguages.length) return true;
+  // A years requirement with ordinary words around it ("שיביא לי מעל 10 שנות
+  // ניסיון") — the filler lands in unknownTerms, and demanding a matched
+  // technology for it dropped every candidate. The years were already enforced
+  // above, so they are what decides.
+  if (!asked && !req.spokenLanguages.length && (req.minYears != null || req.maxYears != null)) return true;
   // Only unknown words or a spoken language to go on: she must have one.
   if (!asked && (req.unknownTerms.length || req.spokenLanguages.length)) {
     return result.matchedTechnologies.length > 0;
