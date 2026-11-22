@@ -172,7 +172,16 @@ export const SECTION_LABEL: Record<CvSection, string> = {
  * years ago still said seven, and Chana needs today's number. "2022 – היום"
  * read in 2026 is four years.
  */
-const NOT_A_JOB = /התנדב|volunteer|לימודי|קורס|הנדסאי|תואר|סטודנט|student|\bcourse\b|degree|bootcamp|שירות\s*(?:צבאי|לאומי)|military|national\s*service/i;
+// Study, a course or service written under the employment heading: none of it
+// is a job, whatever its dates say. A teaching post at a college is a job.
+const STUDY =
+  /התנדב|volunteer|לימוד|קורס|הנדסאי|תואר|סטודנט|סמינר|מכללה|אוניברסיט|הכשרה|תעודת|הסמכה|\b(?:B\.?\s?Sc|B\.?\s?A|M\.?\s?Sc|M\.?\s?A|MBA)\b|student|\bcourse\b|degree|diploma|certificate|college|university|academy|bootcamp|שירות\s*(?:צבאי|לאומי)|military|national\s*service/i;
+const TEACHING = /מרצה|מתרגל|מדריכ|מורה|lecturer|instructor|teacher|\btutor\b/i;
+
+function notAJob(header: string): boolean {
+  if (!STUDY.test(header)) return false;
+  return !TEACHING.test(header) || /התנדב|volunteer|שירות|military|national/i.test(header);
+}
 
 export function yearsFromExperience(experience: string, now = new Date()): number | null {
   const thisYear = now.getFullYear();
@@ -195,7 +204,7 @@ export function yearsFromExperience(experience: string, now = new Date()): numbe
     const header = entry.split("\n").find((l) => l.trim()) ?? "";
     // Unpaid, or study and national service written under the employment
     // heading: none of it is a job, whatever its dates say.
-    if (NOT_A_JOB.test(header)) continue;
+    if (notAJob(header)) continue;
     const years = (header.match(YEAR) ?? [])
       .map(Number)
       .filter((y) => y >= 1980 && y <= thisYear + 1);
@@ -245,7 +254,7 @@ export function earliestWorkYear(experience: string, now = new Date()): number |
   let first: number | null = null;
   for (const entry of splitEntries(experience)) {
     const header = entry.split("\n").find((l) => l.trim()) ?? "";
-    if (NOT_A_JOB.test(header)) continue;
+    if (notAJob(header)) continue;
     for (const y of (header.match(/(?:19|20)\d{2}/g) ?? []).map(Number)) {
       if (y >= 1980 && y <= thisYear + 1 && (first == null || y < first)) first = y;
     }

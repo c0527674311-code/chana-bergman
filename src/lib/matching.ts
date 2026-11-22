@@ -675,6 +675,15 @@ function bucketFloor(bucket: string | null): number {
   return m ? Number(m[1]) : 0;
 }
 
+/** Upper bound of an experience bucket: "5-7 שנים" is 7, "עד שנה" is 1, "10+" has none. */
+function bucketCeiling(bucket: string | null): number | null {
+  if (!bucket || bucket.includes("ללא")) return null;
+  if (bucket.includes("עד שנה")) return 1;
+  if (bucket.includes("+")) return Infinity;
+  const nums = bucket.match(/\d+/g)?.map(Number);
+  return nums?.length ? Math.max(...nums) : null;
+}
+
 const WEIGHTS = { tech: 5, lang: 6, spoken: 4, seniority: 3, region: 2, years: 3, freshness: 1 };
 
 const CV_ONLY_SPELLINGS: Record<string, string[]> = {
@@ -969,6 +978,17 @@ export function scoreCandidate(
         evidence.push({ term: yearsLabel, source: yearsFromCv || graduation ? "cv" : "fields", section: yearsFromCv ? "experience" : graduation ? "education" : undefined });
       }
     }
+  }
+
+  // The two accounts of her seniority disagree by a lot: Chana should see
+  // both, not just the larger number that decided the match.
+  const bandTop = bucketCeiling(candidate.experience_years);
+  if (!neverWorked && datedYears != null && bandTop != null && datedYears > bandTop + 2) {
+    evidence.push({
+      term: `סתירה בוותק: לפי התאריכים בקו״ח ${datedYears} שנים, לפי הסימון בכרטיס ${candidate.experience_years}`,
+      source: "cv",
+      section: "experience",
+    });
   }
 
   // Nothing in the requirement to measure against — not a match, just noise.
