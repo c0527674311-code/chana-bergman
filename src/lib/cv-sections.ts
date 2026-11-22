@@ -172,6 +172,8 @@ export const SECTION_LABEL: Record<CvSection, string> = {
  * years ago still said seven, and Chana needs today's number. "2022 – היום"
  * read in 2026 is four years.
  */
+const NOT_A_JOB = /התנדב|volunteer|לימודי|קורס|הנדסאי|תואר|סטודנט|student|\bcourse\b|degree|bootcamp|שירות\s*(?:צבאי|לאומי)|military|national\s*service/i;
+
 export function yearsFromExperience(experience: string, now = new Date()): number | null {
   const thisYear = now.getFullYear();
   const YEAR = /(?:19|20)\d{2}/g;
@@ -180,30 +182,42 @@ export function yearsFromExperience(experience: string, now = new Date()): numbe
   // line, since "המקום הנוכחי" in a description says nothing about dates.
   const ONGOING_HEADER = /נוכח(?:י|ית)|כעת|עכשיו|עד\s*עכשיו/;
 
-  let earliest: number | null = null;
-  let latest: number | null = null;
-  let ongoing = false;
+  // Each job is a stretch of years; the total is the years covered by at least
+  // one of them. Counting from the earliest year to the last stretched a gap
+  // between jobs, a former career and a volunteer post into seniority — a
+  // 1-2 year developer came out with nine.
+  const stretches: Array<[number, number]> = [];
 
   for (const entry of splitEntries(experience)) {
     // Only the entry's own header line carries its dates. A year mentioned
     // inside the description ("מערכת שעבדה מאז 2018", a course year) is not
     // when the job started, and counting it stretched people's seniority.
     const header = entry.split("\n").find((l) => l.trim()) ?? "";
+    // Unpaid, or study and national service written under the employment
+    // heading: none of it is a job, whatever its dates say.
+    if (NOT_A_JOB.test(header)) continue;
     const years = (header.match(YEAR) ?? [])
       .map(Number)
       .filter((y) => y >= 1980 && y <= thisYear + 1);
     if (!years.length) continue;
-    const min = Math.min(...years);
-    const max = Math.max(...years);
-    earliest = earliest == null ? min : Math.min(earliest, min);
-    latest = latest == null ? max : Math.max(latest, max);
-    if (ONGOING.test(entry) || ONGOING_HEADER.test(header)) ongoing = true;
+    const start = Math.min(...years);
+    const ongoing = ONGOING.test(entry) || ONGOING_HEADER.test(header);
+    stretches.push([start, ongoing ? thisYear : Math.max(...years)]);
   }
 
-  if (earliest == null) return null;
-  const end = ongoing ? thisYear : Math.max(latest ?? earliest, earliest);
-  const years = end - earliest;
-  return years >= 0 && years <= 50 ? years : null;
+  if (!stretches.length) return null;
+  stretches.sort((x, y) => x[0] - y[0]);
+  let total = 0;
+  let [from, to] = stretches[0];
+  for (const [s, e] of stretches.slice(1)) {
+    if (s <= to) to = Math.max(to, e);
+    else {
+      total += to - from;
+      [from, to] = [s, e];
+    }
+  }
+  total += to - from;
+  return total >= 0 && total <= 50 ? total : null;
 }
 
 /**
@@ -223,6 +237,38 @@ export function yearsSinceGraduation(
   const year = fromCv.length ? Math.max(...fromCv) : cardYears.find((y): y is number => !!y && y >= 1980 && y <= thisYear + 1);
   if (year == null || year > thisYear) return null;
   return { years: thisYear - year, year };
+}
+
+/** The first year any job in the employment history started, or null. */
+export function earliestWorkYear(experience: string, now = new Date()): number | null {
+  const thisYear = now.getFullYear();
+  let first: number | null = null;
+  for (const entry of splitEntries(experience)) {
+    const header = entry.split("\n").find((l) => l.trim()) ?? "";
+    if (NOT_A_JOB.test(header)) continue;
+    for (const y of (header.match(/(?:19|20)\d{2}/g) ?? []).map(Number)) {
+      if (y >= 1980 && y <= thisYear + 1 && (first == null || y < first)) first = y;
+    }
+  }
+  return first;
+}
+
+/**
+ * The year her studies began, from the education section — the earliest year
+ * outside school lines, or null. Used to refuse seniority a student cannot
+ * have: a degree that started two years ago cannot be backed by nine years of work
+ * unless the CV shows work from before it.
+ */
+export function studyStartYear(education: string, now = new Date()): number | null {
+  const thisYear = now.getFullYear();
+  let first: number | null = null;
+  for (const line of education.split("\n")) {
+    if (/תיכון|בגרו|יסודי|high\s*school/i.test(line)) continue;
+    for (const y of (line.match(/(?:19|20)\d{2}/g) ?? []).map(Number)) {
+      if (y >= 1980 && y <= thisYear && (first == null || y < first)) first = y;
+    }
+  }
+  return first;
 }
 
 /** Does the requirement ask for hands-on experience, rather than knowledge? */

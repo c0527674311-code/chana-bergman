@@ -10,6 +10,8 @@ import { CONCEPTS, CONCEPT_TERMS, EXTRA_TECHNOLOGIES, EXTRA_TERMS } from "@/lib/
 import {
   asksForExperience,
   yearsFromExperience,
+  earliestWorkYear,
+  studyStartYear,
   yearsSinceGraduation,
   SECTION_WEIGHT,
   splitCvSections,
@@ -327,6 +329,25 @@ function extractYearRange(text: string): { min: number | null; max: number | nul
     if (range) {
       min = Math.min(Number(range[1]), Number(range[2]));
       max = Math.max(Number(range[1]), Number(range[2]));
+    }
+  }
+
+  // The word first: "שנים 7 עד 10", "שנות ניסיון: 7-10". Not read, the search
+  // kept only the ceiling and returned everyone with up to ten years.
+  if (max == null) {
+    const lead = /(?:שנים|שנות(?:\s*ני?סיון)?|ני?סיון|ותק)(?:\s*של)?\s*:?\s*(\d+(?:\.\d+)?)\s*(?:[-–—]|עד|ל-?)\s*(\d+(?:\.\d+)?)(?![\d.])/iu.exec(t);
+    if (lead) {
+      min = Math.min(Number(lead[1]), Number(lead[2]));
+      max = Math.max(Number(lead[1]), Number(lead[2]));
+    }
+  }
+
+  // Just the numbers, "7-10": a range with no unit is still a range.
+  if (max == null) {
+    const bare = /^\s*(\d+(?:\.\d+)?)\s*(?:[-–—]|עד)\s*(\d+(?:\.\d+)?)\s*$/.exec(t);
+    if (bare) {
+      min = Math.min(Number(bare[1]), Number(bare[2]));
+      max = Math.max(Number(bare[1]), Number(bare[2]));
     }
   }
 
@@ -822,7 +843,12 @@ export function scoreCandidate(
   // Counted here, before spoken languages are cited: "אנגלית" in a job
   // description is not the experience the employer asked about.
   const skillsInExperience = experienceTerms;
-  const skillsAsked = req.programmingLanguages.length + req.technologies.length + (req.unknownTerms.length ? 1 : 0);
+  // Unknown words only count as a skill when the text is not a years search:
+  // beside "10 שנות ניסיון" they are filler ("שיביא לי"), not something to
+  // find in a job she held.
+  const yearsSearch = req.minYears != null || req.maxYears != null;
+  const skillsAsked =
+    req.programmingLanguages.length + req.technologies.length + (req.unknownTerms.length && !yearsSearch ? 1 : 0);
 
   let score = 0;
   let max = 0;
@@ -910,7 +936,16 @@ export function scoreCandidate(
   const graduation = hasWorked
     ? null
     : yearsSinceGraduation(sections.education, [candidate.diversitech_year, candidate.cohort_year]);
-  const years = hasWorked ? Math.max(datedYears ?? 0, bandYears) : graduation?.years ?? 0;
+  let years = hasWorked ? Math.max(datedYears ?? 0, bandYears) : graduation?.years ?? 0;
+  // A degree begun in the last three years, and no job dated before it: she
+  // cannot have more years than the degree has run, whatever the band says
+  // (a band the parser filled in wrongly outranked the dates before this).
+  const thisYear = new Date().getFullYear();
+  const studyStart = studyStartYear(sections.education);
+  const workStart = earliestWorkYear(sections.experience);
+  if (studyStart != null && studyStart >= thisYear - 3 && (workStart == null || workStart >= studyStart)) {
+    years = Math.min(years, thisYear - studyStart);
+  }
   const yearsLabel = graduation
     ? `ללא ניסיון תעסוקתי — ${graduation.years} שנים מסיום הלימודים (${graduation.year})`
     : datedYears != null && datedYears >= bandYears
@@ -964,7 +999,11 @@ export function scoreCandidate(
     evidence,
     // The skills asked for appear in a job she held: one of them when one or
     // two were asked, a third of them when the requirement lists many.
-    experienceMatch: skillsInExperience >= Math.max(1, skillsAsked <= 2 ? 1 : Math.ceil(skillsAsked / 3)),
+    // With no skill asked ("10 שנות ניסיון") there is nothing to find in a job
+    // she held, and the match screen hides every row where this is false when
+    // the text says "ניסיון" — which emptied the list for every years search.
+    experienceMatch:
+      skillsAsked === 0 || skillsInExperience >= Math.max(1, skillsAsked <= 2 ? 1 : Math.ceil(skillsAsked / 3)),
     experienceTerms: skillsInExperience,
     datedYears,
     years,
